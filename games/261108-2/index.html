@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ebe2cd">
+<title>ぷしゅう、ぱあっ！風車と三つの窓のおたすけ放水</title>
+<style>
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#ebe2cd;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+body{position:fixed;inset:0}
+canvas{position:absolute;left:0;top:0;display:block;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#sa{position:absolute;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="sa"></div>
+<script>
+(()=>{
+'use strict';
+// ===================== 基本 =====================
+const TAU=Math.PI*2, PI=Math.PI, D2R=PI/180;
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const ease=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
+const eOut=t=>{t=clamp(t,0,1);return 1-(1-t)*(1-t);};
+const hyp=Math.hypot;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+// 象牙色一色＋同系の琥珀（強調色）
+const C={bg:'#ebe2cd',sky:'#f1e9d8',hill:'#e8dec7',base:'#efe6d1',mid:'#e2d6bb',dim:'#d3c5a4',low:'#c2b18c',hi:'#fffbf3',sh:'#a8956f',
+  acc:'#e39b3e',accHi:'#f6cd8a',accLo:'#b2701f',accSh:'#9a6020',accEdge:'#ffe7bf'};
+function h2r(h){return[parseInt(h.substr(1,2),16),parseInt(h.substr(3,2),16),parseInt(h.substr(5,2),16)];}
+const RGB={};for(const k in C)RGB[k]=h2r(C[k]);
+function mix(a,b,t){const x=RGB[a],y=RGB[b];t=clamp(t,0,1);return 'rgb('+((x[0]+(y[0]-x[0])*t)|0)+','+((x[1]+(y[1]-x[1])*t)|0)+','+((x[2]+(y[2]-x[2])*t)|0)+')';}
+function bz(p0,p1,p2,p3,u){const v=1-u;return[v*v*v*p0[0]+3*v*v*u*p1[0]+3*v*u*u*p2[0]+u*u*u*p3[0],v*v*v*p0[1]+3*v*v*u*p1[1]+3*v*u*u*p2[1]+u*u*u*p3[1]];}
+
+// ===================== レイアウト（設計座標） =====================
+// 縦向き 400x820 / 横向き 1000x680
+const LP={W:400,H:820,u:1,
+  house:{x0:10,x1:180,px:95,py:255,eave:337,ov:9,ground:560},
+  fire:[141,294], win:{x:95,y:405,w:66,h:64},
+  gutter:{x0:116,x1:196,y:340}, spout:{x:191,y0:352,y1:474,mx:207,my:482},
+  c1:{x:233,y:500,len:44}, pud1:[222,561],
+  trough:{x0:196,y0:347,x1:318,y1:402}, c2:{x:335,y:420,len:40}, pud2:[318,561],
+  big:{x:228,y:98,r:66,base:186}, small:{x:356,y:178,r:26,base:250},
+  station:{x0:172,x1:290,y0:186,y1:250}, vane:[276,180],
+  hill:{cx:290,cy:268,rx:230,ry:92},
+  truck:{x0:6,x1:188,y0:578,y1:650}, reel:[52,584], nozzle:[192,560], ground:561, road:[561,658],
+  board:{x0:210,x1:396,y0:576,y1:650}, cards:[[242,613],[303,613],[364,613]], cw:54, ch:62,
+  shops:[{x:8,y:664,w:126},{x:137,y:664,w:126},{x:266,y:664,w:126}]
+};
+const LL={W:1000,H:680,u:1.25,
+  house:{x0:40,x1:250,px:145,py:150,eave:238,ov:11,ground:560},
+  fire:[203,194], win:{x:145,y:330,w:78,h:76},
+  gutter:{x0:168,x1:262,y:241}, spout:{x:257,y0:254,y1:464,mx:274,my:474},
+  c1:{x:305,y:492,len:54}, pud1:[292,561],
+  trough:{x0:262,y0:247,x1:402,y1:316}, c2:{x:422,y:336,len:48}, pud2:[404,561],
+  big:{x:720,y:132,r:104,base:250}, small:{x:440,y:150,r:34,base:300},
+  station:{x0:632,x1:812,y0:250,y1:314}, vane:[796,244],
+  hill:{cx:730,cy:330,rx:380,ry:150},
+  truck:{x0:14,x1:262,y0:584,y1:668}, reel:[72,590], nozzle:[268,570], ground:561, road:[600,680],
+  board:{x0:522,x1:990,y0:326,y1:398}, cards:[[602,362],[756,362],[910,362]], cw:98, ch:62,
+  shops:[{x:500,y:410,w:160},{x:665,y:410,w:160},{x:830,y:410,w:160}]
+};
+
+// ===================== キャンバス =====================
+const cv=document.getElementById('c');
+const mainCtx=cv.getContext('2d');
+let ctx=mainCtx;
+let W=0,H=0,DPR=1,K=1,OX=0,OY=0,L=LP,portrait=true,bg=null,bgx=null;
+function readSafe(){const cs=getComputedStyle(document.getElementById('sa'));return{t:parseFloat(cs.paddingTop)||0,r:parseFloat(cs.paddingRight)||0,b:parseFloat(cs.paddingBottom)||0,l:parseFloat(cs.paddingLeft)||0};}
+
+// 設計座標→画面の派生値
+const G={};
+function derive(){
+  const h=L.house, u=L.u;
+  G.FS=L.fire;                                     // 火の位置（屋根の上）
+  G.GE=[L.gutter.x1-4,L.gutter.y-3];               // 雨どい右端
+  G.shopW=L.shops.map(s=>{const sc=s.w/160;return{sc,x:s.x,y:s.y,w:s.w,h:190*sc,
+    wc:[s.x+63*sc,s.y+111*sc], vc:[s.x+132*sc,s.y+96*sc], cx:s.x+80*sc};});
+  const big=L.big, sm=L.small;
+  // 風の通り道（風受け→風車）
+  const t1=[L.c1.x+Math.cos(250*D2R)*L.c1.len*.8,L.c1.y+Math.sin(250*D2R)*L.c1.len*.8];
+  const e1=[big.x-big.r*.25,big.y+big.r*.62];
+  G.lane1=[t1,[t1[0]+10*u,t1[1]-110*u],[e1[0]-20*u,e1[1]+90*u],e1];
+  const t2=[L.c2.x+Math.cos(250*D2R)*L.c2.len*.8,L.c2.y+Math.sin(250*D2R)*L.c2.len*.8];
+  const e2=[sm.x-sm.r*.2,sm.y+sm.r*.6];
+  G.lane2=[t2,[t2[0]+6*u,t2[1]-60*u],[e2[0]-8*u,e2[1]+50*u],e2];
+  // 返り風（店の窓→大風車）
+  G.ret=G.shopW.map(s=>{const p0=[s.wc[0],s.wc[1]-10*u],p3=[big.x+big.r*.35,big.y+big.r*.55];
+    return[p0,[p0[0]+(portrait?30:-20)*u,p0[1]-150*u],[p3[0]+60*u,p3[1]+120*u],p3];});
+  // 灯りの道（風車→店の窓）
+  G.route=[[],[]];
+  for(let i=0;i<3;i++){
+    const s=G.shopW[i];
+    const p3=[s.wc[0],s.wc[1]];
+    {const p0=[big.x,big.y+6*u];G.route[0][i]=[p0,[clamp(big.x+(portrait?140:150)*u,10,L.W-10),big.y+40*u],[clamp(p3[0]+(portrait?90:60)*u,10,L.W-10),p3[1]-(portrait?230:200)*u],p3];}
+    {const p0=[sm.x,sm.y+4*u];G.route[1][i]=[p0,[clamp(sm.x-(portrait?30:-10)*u,10,L.W-10),sm.y+130*u],[clamp(p3[0]-(portrait?10:50)*u,10,L.W-10),p3[1]-120*u],p3];}
+  }
+  // ホースの曲線
+  G.hose=[[L.reel[0],L.reel[1]],[L.reel[0]+20*u,L.reel[1]-58*u],[L.nozzle[0]-70*u,L.nozzle[1]-30*u],[L.nozzle[0]-8*u,L.nozzle[1]+4*u]];
+}
+
+function resize(){
+  W=Math.max(1,window.innerWidth);H=Math.max(1,window.innerHeight);
+  DPR=Math.min(2,window.devicePixelRatio||1,Math.sqrt(2.4e6/(W*H)));DPR=Math.max(1,DPR);
+  cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  cv.style.width=W+'px';cv.style.height=H+'px';
+  const sa=readSafe();
+  const aw=Math.max(50,W-sa.l-sa.r), ah=Math.max(50,H-sa.t-sa.b);
+  const np=aw/ah<1.0;
+  if(np!==portrait){S.parts.length=0;S.winds.length=0;S.blobs.length=0;}
+  portrait=np;L=portrait?LP:LL;
+  K=Math.min(aw/L.W,ah/L.H);
+  OX=sa.l+(aw-L.W*K)/2;OY=sa.t+(ah-L.H*K)/2;
+  derive();
+  buildBG();
+}
+function setT(c){c.setTransform(DPR*K,0,0,DPR*K,DPR*OX,DPR*OY);}
+
+// ===================== 浮き彫り描画ヘルパー =====================
+// R: 浮き彫り（左上から光）。d は画面px（2〜4px）
+function R(d,base,build,sh,hi){const o=d/K;
+  ctx.save();ctx.translate(o,o);ctx.beginPath();build();ctx.fillStyle=sh||C.sh;ctx.fill();ctx.restore();
+  ctx.save();ctx.translate(-o*.7,-o*.7);ctx.beginPath();build();ctx.fillStyle=hi||C.hi;ctx.fill();ctx.restore();
+  ctx.beginPath();build();ctx.fillStyle=base;ctx.fill();}
+// Rc: 彫り込み（内側の左上に影、右下に光）
+function Rc(d,base,build){const o=d/K;
+  ctx.save();ctx.translate(o*.6,o*.6);ctx.beginPath();build();ctx.fillStyle=C.hi;ctx.fill();ctx.restore();
+  ctx.beginPath();build();ctx.fillStyle=C.sh;ctx.fill();
+  ctx.save();ctx.clip();ctx.translate(o,o);ctx.beginPath();build();ctx.fillStyle=base;ctx.fill();ctx.restore();}
+// RS: 浮き彫りの線（ホース・ロープ・棒）
+function RS(d,w,col,build,sh,hi){const o=d/K;ctx.lineWidth=w;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.save();ctx.translate(o,o);ctx.beginPath();build();ctx.strokeStyle=sh||C.sh;ctx.stroke();ctx.restore();
+  ctx.save();ctx.translate(-o*.7,-o*.7);ctx.beginPath();build();ctx.strokeStyle=hi||C.hi;ctx.stroke();ctx.restore();
+  ctx.beginPath();build();ctx.strokeStyle=col;ctx.stroke();}
+// Gv: 彫り溝の線
+function Gv(w,build){const o=1.3/K;ctx.lineWidth=w;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.save();ctx.translate(o,o);ctx.beginPath();build();ctx.strokeStyle=C.hi;ctx.stroke();ctx.restore();
+  ctx.beginPath();build();ctx.strokeStyle=C.sh;ctx.stroke();}
+function rr(x,y,w,h,r){r=Math.min(r,w/2,h/2);ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function circ(x,y,r){ctx.moveTo(x+r,y);ctx.arc(x,y,r,0,TAU);}
+function T(x,y,s,a){ctx.save();ctx.translate(x,y);if(a)ctx.rotate(a);if(s!==undefined&&s!==1)ctx.scale(s,s);}
+function U(){ctx.restore();}
+// 粒の一括描画（隆起した水粒など）
+function beads(list,col,sh,hi,d){if(!list.length)return;const o=(d||2)/K;
+  const path=(dx,dy)=>{ctx.beginPath();for(const b of list){ctx.moveTo(b[0]+dx+b[2],b[1]+dy);ctx.arc(b[0]+dx,b[1]+dy,b[2],0,TAU);}};
+  path(o,o);ctx.fillStyle=sh||C.sh;ctx.fill();
+  path(-o*.7,-o*.7);ctx.fillStyle=hi||C.hi;ctx.fill();
+  path(0,0);ctx.fillStyle=col||C.base;ctx.fill();}
+
+// ===================== 図柄（札と店で共通） =====================
+function iconBread(x,y,s){
+  R(3,C.base,()=>{T(x,y,s);ctx.ellipse(0,0,22,13,0,0,TAU);U();});
+  Gv(2.2*s,()=>{T(x,y,s);for(let i=-1;i<=1;i++){ctx.moveTo(i*11-5,-7);ctx.lineTo(i*11+5,5);}U();});
+}
+function iconClock(x,y,s,a1,a2){
+  R(3,C.base,()=>{T(x,y,s);circ(0,0,20);U();});
+  Rc(2,C.mid,()=>{T(x,y,s);circ(0,0,15);U();});
+  const dots=[];for(let i=0;i<12;i++){const a=i/12*TAU;dots.push([x+Math.cos(a)*12.2*s,y+Math.sin(a)*12.2*s,(i%3?1.1:1.8)*s]);}
+  beads(dots,C.base,C.sh,C.hi,1.5);
+  const A1=a1===undefined?-PI/2+.9:a1, A2=a2===undefined?-PI/2-1.7:a2;
+  RS(2,2.6*s,C.base,()=>{T(x,y,s);ctx.moveTo(0,0);ctx.lineTo(Math.cos(A2)*7,Math.sin(A2)*7);ctx.moveTo(0,0);ctx.lineTo(Math.cos(A1)*11,Math.sin(A1)*11);U();});
+  R(1.5,C.base,()=>{T(x,y,s);circ(0,0,2.4);U();});
+}
+function iconProj(x,y,s,spin){spin=spin||0;
+  // 二つのリール
+  for(const rx of[-9,9]){
+    R(3,C.base,()=>{T(x,y,s);circ(rx,-10,9);U();});
+    Gv(1.8*s,()=>{T(x+rx*s,y-10*s,s,spin*(rx<0?1:1.2));for(let k=0;k<3;k++){const a=k/3*TAU;ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*6.5,Math.sin(a)*6.5);}U();});
+  }
+  R(3,C.base,()=>{T(x,y,s);rr(-17,0,30,15,3);U();});
+  R(2.5,C.mid,()=>{T(x,y,s);ctx.moveTo(13,3);ctx.lineTo(22,0);ctx.lineTo(22,15);ctx.lineTo(13,12);ctx.closePath();U();});
+}
+const ICON=[iconBread,iconClock,iconProj];
+
+// ===================== 状態 =====================
+const S={parts:[],winds:[],blobs:[]};
+function resetState(){
+  Object.assign(S,{t:0,lastInput:0,phase:'play',
+    fire:{hp:1,out:false,sink:0,outT:-9},
+    friend:{waveT:-9,cheerT:-9,lx:0,ly:0,evX:0,evY:0,evT:-9},
+    win:{open:0,target:0,openAt:-1},
+    c1:{f:0,open:0,v:0,flow:0,acc:0,lastKick:-9},c2:{open:0,v:0,flow:0,acc:0,lastKick:-9},
+    hose:{down:false,pid:null,holdT:0,sq:0,sqv:0,st:0,stv:0,rings:[],ringT:0,demoSq:0},
+    pool:0,trAcc:0,trT:0,dl:[],gutter:0,trough:0,cap:1,overflowEver:false,overT:-9,lipBend:0,
+    pud1:0,pud2:0,
+    big:{a:0,om:0,ch:0,disp:0,tickT:0,ventT:0},small:{a:0,om:0,ch:0,ever:false},
+    lights:[],sel:-1,selT:-9,mode:-1,deliveries:0,order:[],cycles:0,lastOrder:[],
+    shops:[0,1,2].map(()=>({lit:false,litA:0,e:0,flash:0,vent:0,va:0,tickT:0,hand:0,hour:0,reel:0,knead:0,shake:0,bulb:0})),
+    ret:null,revMode:-1,townGlow:0,shadow:0,shadowT:-9,
+    vane:-PI/2,vaneT:-PI/2,demo:{active:false,t:0,done:{},key:'',target:null,long:false},
+    shk:{},log:[]
+  });
+  S.parts.length=0;S.winds.length=0;S.blobs.length=0;
+}
+function log(k,v){S.log.push([+S.t.toFixed(2),k,v===undefined?'':v]);if(S.log.length>400)S.log.shift();}
+resetState();
+
+// ===================== 音（Web Audio 合成） =====================
+let AC=null,master=null,NB=null,hoseSnd=null;
+function audioInit(){
+  try{
+    if(AC){if(AC.state==='suspended')AC.resume().catch(()=>{});return;}
+    const A=window.AudioContext||window.webkitAudioContext;if(!A)return;
+    AC=new A();master=AC.createGain();master.gain.value=.6;
+    const comp=AC.createDynamicsCompressor();master.connect(comp);comp.connect(AC.destination);
+    NB=AC.createBuffer(1,Math.floor(AC.sampleRate*1.2),AC.sampleRate);
+    const d=NB.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+    if(AC.state==='suspended')AC.resume().catch(()=>{});
+    // 無音で起こす（iOS）
+    const o=AC.createOscillator(),g=AC.createGain();g.gain.value=0;o.connect(g);g.connect(master);o.start();o.stop(AC.currentTime+.05);
+  }catch(e){AC=null;}
+}
+function ok(){return AC&&AC.state!=='closed';}
+function tone(f,dur,type,vol,at,f2,att){if(!ok())return;try{
+  const t=AC.currentTime+(at||0),o=AC.createOscillator(),g=AC.createGain();
+  o.type=type||'sine';o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+  const a=att||.008;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+a);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+.05);}catch(e){}}
+function noise(dur,freq,q,vol,at,type,f2,att){if(!ok()||!NB)return;try{
+  const t=AC.currentTime+(at||0),s=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();
+  s.buffer=NB;s.loop=true;f.type=type||'bandpass';f.frequency.setValueAtTime(freq,t);if(f2)f.frequency.exponentialRampToValueAtTime(f2,t+dur);f.Q.value=q||1;
+  const a=att||.01;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+a);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random()*.5);s.stop(t+dur+.05);}catch(e){}}
+const SND={
+  hoseOn(){if(!ok())return;try{
+    tone(95,.18,'sine',.35,0,60);noise(.09,300,1,.25,0,'lowpass');
+    const t=AC.currentTime,s=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();
+    s.buffer=NB;s.loop=true;f.type='bandpass';f.frequency.value=800;f.Q.value=.9;
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.2,t+.03);
+    s.connect(f);f.connect(g);g.connect(master);s.start(t);hoseSnd={s,f,g};
+  }catch(e){hoseSnd=null;}},
+  hoseUpd(hold){if(!hoseSnd||!ok())return;try{const t=AC.currentTime;
+    hoseSnd.f.frequency.setTargetAtTime(800+Math.min(hold,2.2)*700,t,.05);
+    hoseSnd.g.gain.setTargetAtTime(.17+Math.min(hold,2)*.05,t,.08);}catch(e){}},
+  hoseOff(hold){if(hoseSnd&&ok()){try{const t=AC.currentTime;hoseSnd.g.gain.cancelScheduledValues(t);hoseSnd.g.gain.setTargetAtTime(.0001,t,.03);hoseSnd.s.stop(t+.2);}catch(e){}}
+    hoseSnd=null;
+    // 弾み戻り
+    const b=200+Math.min(hold,2)*60;tone(b,.22,'sine',.22,0,b*1.9);tone(b*1.9,.18,'sine',.1,.09,b*1.2);},
+  plop(sz){const f=520-Math.min(sz,1.5)*160;tone(f,.16,'sine',.28,0,f*.45);noise(.12,1500,1.2,.08+Math.min(sz,1.5)*.08,.01);},
+  flap(big){tone(big?120:160,.12,'triangle',.3,0,big?70:90);noise(.07,big?700:1000,.8,.22,0,'lowpass');},
+  drip(){tone(rnd(900,1300),.07,'sine',.07,0,500);},
+  gust(p){noise(.7,400,1.4,.05+p*.1,0,'bandpass',1400,.15);},
+  fireOut(){noise(.7,3000,.7,.18,0,'highpass',1500,.02);[523,659,784,1047].forEach((f,i)=>tone(f,.5,'triangle',.18,.15+i*.12));},
+  sizzle(){noise(.12,3500,1,.06,0,'highpass');},
+  light(){tone(1319,.6,'sine',.14,0);tone(1976,.4,'sine',.07,.02);},
+  card(i){const f=[620,740,880][i];tone(f,.08,'triangle',.25,0,f*.8);tone(f*1.5,.06,'sine',.08,.03);},
+  shop(i){
+    if(i===0){[392,494,587,784].forEach((f,k)=>tone(f,.35,'triangle',.17,k*.09));}
+    else if(i===1){tone(1800,.05,'square',.05,0);tone(1400,.05,'square',.05,.18);[784,659,523].forEach((f,k)=>tone(f,.6,'sine',.17,.32+k*.16));}
+    else{for(let k=0;k<6;k++)tone(260+k*20,.05,'square',.04,k*.05);[440,554,659,880].forEach(f=>tone(f,.9,'sine',.08,.32,0,.15));}
+  },
+  vent(i){if(i===0)noise(.25,500,1,.03,0,'bandpass',900);else if(i===1)tone(2100,.03,'square',.025);else noise(.6,300,1,.03,0,'bandpass',600,.2);},
+  ret(i){noise(1.0,300,1.2,.18,0,'bandpass',1600,.25);tone([262,330,392][i],.9,'triangle',.12,.1,0,.2);},
+  finale(){[262,330,392,523,659,784].forEach((f,i)=>tone(f,1.4,'triangle',.11,i*.1,0,.05));noise(1.4,800,.8,.1,0,'bandpass',2400,.3);},
+  shadow(){[1568,1760,2093,2637].forEach((f,i)=>tone(f,.7,'sine',.07,i*.13,0,.04));},
+  poke(){tone(rnd(420,520),.07,'sine',.08,0,300);},
+  overflow(){tone(330,.25,'sine',.15,0,520);tone(494,.3,'sine',.12,.1,700);noise(.4,1200,1,.08,0);},
+  open(){tone(330,.12,'triangle',.15,0,440);tone(659,.3,'sine',.12,.12);},
+  tick(){tone(2400,.02,'square',.02);}
+};
+
+// ===================== パーティクル =====================
+const MAXP=230,MAXW=70;
+function addP(p){if(S.parts.length>=MAXP)S.parts.shift();S.parts.push(p);}
+function addW(w){if(S.winds.length>=MAXW)S.winds.shift();S.winds.push(w);}
+function splash(x,y,n,sp,r){for(let i=0;i<n;i++){const a=-PI/2+rnd(-1.3,1.3);const v=rnd(.4,1)*(sp||90);addP({k:'sp',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,age:0,life:rnd(.3,.55),r:(r||2.2)*rnd(.7,1.2)});}}
+function sparks(x,y,n,sp){for(let i=0;i<n;i++){const a=rnd(0,TAU),v=rnd(.4,1)*(sp||110);addP({k:'spark',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,age:0,life:rnd(.5,.9),r:rnd(2,3.6)*L.u});}}
+
+// ===================== ホース =====================
+function nozzleInfo(){
+  const h=S.hose,u=L.u,N=L.nozzle,T0=G.FS;
+  const dx=T0[0]-N[0],dy=T0[1]-N[1];
+  let a=Math.atan2(dy-90*u,dx);
+  // 押すと伸びる・震える
+  const vib=h.down?Math.sin(S.t*58)*(0.6+Math.min(h.holdT,2)*.5):0;
+  const ext=h.st*12*u;
+  const bx=N[0]+Math.cos(a)*ext+vib*.6, by=N[1]+Math.sin(a)*ext+vib;
+  const len=(30-h.sq*7+h.st*4)*u;
+  return{a,bx,by,tx:bx+Math.cos(a)*len,ty:by+Math.sin(a)*len,len};
+}
+function pressHose(){
+  const h=S.hose;h.down=true;h.holdT=0;h.sqv+=14;h.rings.push(0);
+  S.fire.sink=1;                           // 押した瞬間に火が沈む
+  S.c1.peak=0;S.c2.peak=0;S.big.peak=0;
+  if(!S.fire.out){S.fire.hp=Math.max(0,S.fire.hp-.16);}
+  S.pool+=.06;
+  // 最初の水粒をすぐ出す
+  for(let i=0;i<6;i++)spawnWater(i/6*.05);
+  SND.hoseOn();S.stat_press=(S.stat_press||0)+1;log('press');
+}
+function releaseHose(){
+  const h=S.hose;if(!h.down)return;
+  const hold=h.holdT;h.down=false;h.pid=null;h.stv-=10;h.sqv-=8;
+  SND.hoseOff(hold);
+  // 屋根にたまった水がまとまって雨どいへ
+  const amt=S.pool+.1;S.pool=0;
+  S.blobs.push({u:0,amt,jump:0,done:false});
+  log(hold>1.2?'releaseLong':'releaseShort',hold.toFixed(2));
+}
+function spawnWater(delay){
+  const n=nozzleInfo(),u=L.u;
+  const tf=.34+rnd(-.03,.03);const g=900*u;
+  const tx=G.FS[0]+rnd(-6,6)*u,ty=G.FS[1]+rnd(-3,5)*u;
+  const vx=(tx-n.tx)/tf,vy=(ty-n.ty-.5*g*tf*tf)/tf;
+  addP({k:'w',x:n.tx,y:n.ty,vx:vx+rnd(-8,8),vy:vy+rnd(-8,8),age:-(delay||0),life:tf,g,r:rnd(2.8,4.2)*u});
+}
+
+// ===================== 灯り =====================
+function newLight(src){
+  const q=S.lights.filter(l=>l.src===src&&l.st==='wait').length;
+  if(q>=2)return;
+  S.lights.push({src,st:'wait',t:0,shop:-1,dur:1.6,born:S.t,mode:-1,wait:0});
+  SND.light();log('light',src?'small':'big');
+  const w=src?L.small:L.big;sparks(w.x,w.y,8,70);
+}
+function launch(l,shop){
+  l.st='go';l.shop=shop;l.t=0;l.mode=S.mode;
+  l.dur=S.mode===0?1.05:S.mode===1?1.9:S.mode===2?2.3:1.6;
+  if(l.src===1)l.dur*=.9;
+}
+function lightPos(l){
+  const w=l.src?L.small:L.big;
+  if(l.st==='wait'){const k=S.lights.filter(x=>x.src===l.src&&x.st==='wait').indexOf(l);
+    return[w.x+(k?14:0)*L.u+Math.sin(S.t*2+k)*2,w.y+(w.r*.0+(l.src?22:30)+k*4)*L.u+Math.sin(S.t*3)*3];}
+  let p=clamp(l.t/l.dur,0,1);
+  if(l.mode===1){const n=6,f=p*n,i=Math.floor(f);p=Math.min(1,(i+ease(clamp((f-i)*1.6,0,1)))/n);} // 時計：ひょいひょい
+  else if(l.mode===0)p=eOut(p);else p=ease(p);
+  const r=G.route[l.src][l.shop];return bz(r[0],r[1],r[2],r[3],p);
+}
+function arrive(l){
+  const i=l.shop,s=S.shops[i],sw=G.shopW[i];
+  s.e=1;s.flash=1;
+  const first=!s.lit;
+  if(first){s.lit=true;S.order.push(i);}
+  S.deliveries++;S.mode=i;
+  S.friend.cheerT=S.t;S.friend.evX=sw.wc[0];S.friend.evY=sw.wc[1];S.friend.evT=S.t;
+  SND.shop(i);sparks(sw.wc[0],sw.wc[1],14,120);
+  log('arrive',['bakery','clock','cinema'][i]+(l.src?'/small':'/big')+(first?'/new':'/again'));
+  // まれに：映画館の映写光が風車の影を映す（風車が速い時）
+  if(i===2&&S.phase==='play'&&Math.abs(S.big.om)>2.6&&Math.random()<.14)startShadow();
+  if(S.order.length===3&&S.phase==='play'&&!S.ret)S.retAt=S.t+1.3;
+}
+
+// ===================== 一周の返風 =====================
+function startReturn(){
+  S.phase='ret';S.ret={t:0,order:S.order.slice(),fired:[0,0,0],done:false,big:false};
+  S.lastOrder=S.order.slice();
+  log('return',S.order.map(i=>'bcp'[i]).join(''));
+}
+function startShadow(){S.shadow=1;S.shadowT=S.t;SND.shadow();log('shadow');}
+
+// ===================== 誘導 =====================
+function firstUnlit(){for(let i=0;i<3;i++)if(!S.shops[i].lit)return i;return -1;}
+function guide(){
+  if(S.phase==='ret'||S.retAt)return null;
+  if(!S.fire.out)return{k:'hose0',type:'hose'};
+  const waiting=S.lights.some(l=>l.st==='wait');
+  if(S.sel<0&&waiting){const i=Math.max(0,firstUnlit());return{k:'card0',type:'card',i};}
+  if(S.sel>=0&&S.shops[S.sel].lit){const u=firstUnlit();if(u>=0)return{k:'cardu'+u+'_'+S.cycles,type:'card',i:u};}
+  if(!S.overflowEver&&S.deliveries>=1)return{k:'hoselong',type:'hose',long:true};
+  return{k:'hose'+S.cycles,type:'hose'};
+}
+function targetPoint(g){
+  if(!g)return null;
+  if(g.type==='hose'){const n=nozzleInfo();return[lerp(n.bx,L.reel[0],.25),n.by+8*L.u];}
+  return[L.cards[g.i][0],L.cards[g.i][1]];
+}
+
+// ===================== 入力 =====================
+function toD(x,y){return[(x-OX)/K,(y-OY)/K];}
+function inR(p,x0,y0,x1,y1){return p[0]>=x0&&p[0]<=x1&&p[1]>=y0&&p[1]<=y1;}
+function hitHose(p){
+  const t=L.truck,u=L.u;
+  if(inR(p,t.x0-8,t.y0-30*u,t.x1+12*u,t.y1+6))return true;
+  const n=nozzleInfo();
+  if(hyp(p[0]-n.tx,p[1]-n.ty)<40*u||hyp(p[0]-n.bx,p[1]-n.by)<40*u)return true;
+  for(let k=0;k<=8;k++){const q=bz(G.hose[0],G.hose[1],G.hose[2],G.hose[3],k/8);if(hyp(p[0]-q[0],p[1]-q[1])<30*u)return true;}
+  return false;
+}
+function hitCard(p){
+  const b=L.board,n=3,cw=(b.x1-b.x0)/n;
+  if(!inR(p,b.x0,b.y0-6,b.x1+4,b.y1+6))return -1;
+  return clamp(Math.floor((p[0]-b.x0)/cw),0,2);
+}
+function shake(k){S.shk[k]=1;SND.poke();}
+function poke(p){
+  const h=L.house,w=L.win,u=L.u;
+  if(!S.fire.out&&hyp(p[0]-G.FS[0],p[1]-G.FS[1])<30*u){shake('fire');return;}
+  if(inR(p,w.x-w.w/2-6,w.y-w.h/2-6,w.x+w.w/2+6,w.y+w.h/2+6)){shake('friend');S.friend.evX=p[0];S.friend.evY=p[1]-20;S.friend.evT=S.t;return;}
+  for(let i=0;i<3;i++){const s=G.shopW[i];if(inR(p,s.x,s.y-10,s.x+s.w,s.y+s.h)){shake('shop'+i);return;}}
+  if(hyp(p[0]-L.big.x,p[1]-L.big.y)<L.big.r){shake('big');return;}
+  if(hyp(p[0]-L.small.x,p[1]-L.small.y)<L.small.r+8){shake('small');return;}
+  if(inR(p,h.x0-h.ov,h.py,h.x1+h.ov,h.ground)){shake('house');return;}
+  if(hyp(p[0]-L.c1.x,p[1]-L.c1.y)<L.c1.len){shake('c1');return;}
+  if(hyp(p[0]-L.c2.x,p[1]-L.c2.y)<L.c2.len){shake('c2');return;}
+  const st=L.station;if(inR(p,st.x0,st.y0,st.x1,st.y1)){shake('station');return;}
+  // 空白：何も起こさない
+}
+function selectCard(i){
+  S.sel=i;S.selT=S.t;SND.card(i);log('card',['bakery','clock','cinema'][i]);
+  const sw=G.shopW[i];S.friend.evX=sw.wc[0];S.friend.evY=sw.wc[1];S.friend.evT=S.t;
+}
+cv.addEventListener('pointerdown',e=>{
+  e.preventDefault();audioInit();
+  S.lastInput=S.t;if(S.demo.active){S.demo.active=false;}
+  const p=toD(e.clientX,e.clientY);
+  const ci=hitCard(p);if(ci>=0){selectCard(ci);return;}
+  if(hitHose(p)){
+    if(!S.hose.down){S.hose.pid=e.pointerId;try{cv.setPointerCapture(e.pointerId);}catch(_){}pressHose();}
+    return;
+  }
+  poke(p);
+},{passive:false});
+function endPtr(e){if(S.hose.down&&e.pointerId===S.hose.pid){releaseHose();}S.lastInput=S.t;}
+cv.addEventListener('pointerup',endPtr);
+cv.addEventListener('pointercancel',endPtr);
+cv.addEventListener('lostpointercapture',endPtr);
+window.addEventListener('blur',()=>releaseHose());
+for(const ev of['contextmenu','selectstart','dragstart','gesturestart','gesturechange','dblclick'])document.addEventListener(ev,e=>e.preventDefault(),{passive:false});
+document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+document.addEventListener('touchstart',e=>{if(e.touches.length>1)e.preventDefault();},{passive:false});
+
+// ===================== 更新 =====================
+function spring(o,k,vk,target,dt,kk,damp){const a=(target-o[k])*kk-o[vk]*damp;o[vk]+=a*dt;o[k]+=o[vk]*dt;}
+function update(dt){
+  S.t+=dt;const u=L.u,t=S.t;
+  // ---- ホース ----
+  const h=S.hose;
+  let flow=0;
+  if(h.down){h.holdT+=dt;flow=.45+.85*ease(h.holdT/1.6);SND.hoseUpd(h.holdT);
+    h.ringT+=dt;if(h.ringT>.32){h.ringT=0;h.rings.push(0);}
+    const n=Math.min(5,2+Math.floor(flow*2.4));for(let i=0;i<n;i++)spawnWater(rnd(0,dt));
+  }
+  spring(h,'sq','sqv',h.down?1:0,dt,260,16);
+  spring(h,'st','stv',h.down?ease(h.holdT/1.6):0,dt,120,9);
+  for(let i=h.rings.length-1;i>=0;i--){h.rings[i]+=dt*2.6;if(h.rings[i]>1)h.rings.splice(i,1);}
+  // ---- 火 ----
+  const f=S.fire;f.sink=Math.max(0,f.sink-dt*(h.down?.6:2.5));if(h.down)f.sink=Math.max(f.sink,.55);
+  const w=flow*dt;
+  if(w>0){
+    if(!f.out){f.hp-=w*.9;if(Math.random()<.2)SND.sizzle();}
+    S.pool=Math.min(2.2,S.pool+w*.35);
+    S.trAcc+=w*.65;
+  }
+  if(!f.out&&f.hp<=0){f.out=true;f.outT=t;SND.fireOut();log('fireOut');
+    for(let i=0;i<10;i++)addP({k:'steam',x:G.FS[0]+rnd(-10,10)*u,y:G.FS[1]-rnd(0,10)*u,vx:rnd(-10,10),vy:-rnd(25,55),age:0,life:rnd(1,1.8),r:rnd(5,9)*u});
+    S.friend.waveT=t+.2;S.win.openAt=t+.9;S.friend.evX=G.FS[0];S.friend.evY=G.FS[1];S.friend.evT=t;}
+  // 屋根を流れる水→遅れて雨どいへ
+  S.trT+=dt;if(S.trT>.1&&S.trAcc>0){S.trT=0;S.dl.push([t+.5,S.trAcc]);
+    addP({k:'roll',u:0,sp:rnd(1.8,2.4),r:rnd(2.4,3.4)*u,age:0,life:9});S.trAcc=0;}
+  while(S.dl.length&&S.dl[0][0]<=t){S.gutter+=S.dl.shift()[1];}
+  // 水の塊が雨どいへ跳ねる
+  for(let i=S.blobs.length-1;i>=0;i--){const b=S.blobs[i];
+    if(b.u<1){b.u+=dt*2.6;}else{b.jump+=dt*3.2;if(b.jump>=1){S.gutter+=b.amt;SND.plop(b.amt);
+      splash(G.GE[0],G.GE[1],Math.min(8,3+Math.floor(b.amt*5)),90*u,2.4*u);S.blobs.splice(i,1);
+      log('blob',b.amt.toFixed(2));}}}
+  // 窓（救助後）
+  const wn=S.win;if(wn.openAt>0&&t>=wn.openAt){wn.target=1;wn.openAt=-1;SND.open();log('windowOpen');}
+  wn.open+=(wn.target-wn.open)*Math.min(1,dt*2.4);
+  // 風受け1の向き（窓とロープで連動）
+  const c1=S.c1;c1.f+=(clamp((wn.open-.25)/.6,0,1)-c1.f)*Math.min(1,dt*3);
+  // ---- 雨どい・あふれ ----
+  if(S.gutter>S.cap){const over=S.gutter-S.cap;S.gutter=S.cap;S.trough+=over;
+    if(!S.overflowEver){S.overflowEver=true;SND.overflow();log('overflowFirst');}
+    if(t-S.overT>.8){log('overflow');}S.overT=t;}
+  S.lipBend+=((S.overflowEver?1:0)-S.lipBend)*Math.min(1,dt*2);
+  S.cap=S.overflowEver?.82:1; // 一度あふれた溝は口が開いたまま（記憶）
+  const drain=S.gutter>0?Math.min(S.gutter,(.1+.24*S.gutter)*dt):0;S.gutter-=drain;
+  c1.flow+=((drain/dt)-c1.flow)*Math.min(1,dt*7);
+  if(drain>0&&Math.random()<drain/dt*4*dt*10){addP({k:'drop',x:L.spout.mx+rnd(-2,2)*u,y:L.spout.my,vx:rnd(-6,6),vy:20,age:0,life:2,r:rnd(2.2,3.2)*u,c:1});}
+  const td=S.trough>0?Math.min(S.trough,(.14+.45*S.trough)*dt):0;S.trough-=td;
+  S.c2.flow+=((td/dt)-S.c2.flow)*Math.min(1,dt*7);
+  if(td>0&&Math.random()<td/dt*5*dt*10){addP({k:'drop',x:L.trough.x1+rnd(-2,2)*u,y:L.trough.y1+4*u,vx:rnd(-6,6),vy:20,age:0,life:2,r:rnd(2.2,3.2)*u,c:2});}
+  // ---- 風受け ----
+  for(const [c,idx] of [[c1,1],[S.c2,2]]){
+    const up=idx===1?c1.f>.5:true;
+    const tgt=up?clamp(c.flow*3.4,0,1):0;
+    if(up&&c.flow>.05&&c.open<.12&&t-c.lastKick>.6){c.v+=9;c.lastKick=t;SND.flap(c.flow>.22);log('flap'+idx,c.flow.toFixed(2));}
+    spring(c,'open','v',tgt,dt,40,7);c.open=clamp(c.open,-.1,1.15);c.peak=Math.max(c.peak||0,c.open);
+    if(up){c.acc+=c.flow*dt;
+      while(c.acc>=.045){c.acc-=.045;
+        const lane=idx===1?G.lane1:G.lane2;
+        addW({lane,u:0,sp:rnd(1.1,1.4),p:.045,to:idx===1?'big':'small',w:rnd(.7,1.2),off:rnd(-6,6)*u,kind:0});
+        if(Math.random()<.25)SND.gust(c.flow);}
+    }else{ if(idx===1)S.pud1=Math.min(1.2,S.pud1+c.flow*dt*1.2); }
+  }
+  S.pud1=Math.max(0,S.pud1-dt*.02);S.pud2=Math.max(0,S.pud2-dt*.02);
+  // ---- 風の筋 ----
+  const big=S.big,sm=S.small;
+  for(let i=S.winds.length-1;i>=0;i--){const g=S.winds[i];g.u+=dt*g.sp;
+    if(g.u>=1){
+      if(g.to==='big'){
+        if(g.kind===0){big.om+=g.p*10;big.ch+=g.p*1.3;}
+        else if(g.kind===1){ // 店の羽根の風：回り方を変える
+          if(g.shop===0)big.om+=.5;else if(g.shop===1)big.om+=.35;else big.om+=.15;}
+        else if(g.kind===2){ // 返り風
+          if(g.shop===0)big.om-=1.1;else if(g.shop===1)big.om-=.55;else big.om-=.75;}
+      }else{sm.om+=g.p*14;sm.ch+=g.p*1.7;sm.ever=true;}
+      S.winds.splice(i,1);}
+  }
+  // ---- 風車 ----
+  const mode=S.phase==='ret'&&S.revMode>=0?S.revMode:S.mode;
+  let fr=.45;if(mode===0)fr=.22;else if(mode===2)fr=.35;
+  big.om*=Math.exp(-fr*dt);big.om=clamp(big.om,-7,8);
+  if(S.phase==='ret'&&S.ret&&S.ret.t>3.4){const rv=S.revMode;
+    if(rv===0)big.om+=(-3.4-big.om)*dt*1.5;
+    else if(rv===1){big.tickT+=dt;if(big.tickT>.55){big.tickT=0;big.om-=1.6;SND.tick();}}
+    else big.om+=(-1.1-big.om)*dt*1.2;}
+  big.a+=big.om*dt;big.peak=Math.max(big.peak||0,Math.abs(big.om));
+  // 表示角：時計の後は「カチ、カチ」、映画館の後は「ゆらり」
+  if(mode===1){const st=TAU/16,i=Math.floor(big.a/st);const fr2=big.a/st-i;big.disp=(i+ease(clamp(fr2*3,0,1)))*st;
+    const k=Math.floor(big.a/st);if(k!==big.lastStep){big.lastStep=k;if(Math.abs(big.om)>.2&&Math.random()<.5)SND.tick();}}
+  else if(mode===2)big.disp=big.a+Math.sin(t*1.1)*.28;
+  else big.disp=big.a;
+  sm.om*=Math.exp(-.5*dt);sm.om=clamp(sm.om,-6,9);sm.a+=sm.om*dt;
+  if(big.ch>=1){big.ch-=1;newLight(0);}big.ch=Math.min(big.ch,1.6);
+  if(sm.ch>=1){sm.ch-=1;newLight(1);}sm.ch=Math.min(sm.ch,1.6);
+  // ---- 灯り ----
+  let launchedThisFrame=false;
+  for(let i=S.lights.length-1;i>=0;i--){const l=S.lights[i];l.t+=dt;
+    if(l.st==='wait'){l.wait+=dt;if(S.sel>=0&&S.phase==='play'&&!S.retAt&&!launchedThisFrame&&l.wait>.35){launch(l,S.sel);launchedThisFrame=true;}}
+    else if(l.st==='go'){
+      if(Math.random()<.5){const p=lightPos(l);addP({k:'trail',x:p[0],y:p[1],vx:0,vy:0,age:0,life:l.mode===2?.9:.45,r:rnd(1.8,3)*u});}
+      if(l.t>=l.dur){arrive(l);S.lights.splice(i,1);}}
+  }
+  // ---- 店 ----
+  for(let i=0;i<3;i++){const s=S.shops[i];
+    s.litA+=((s.lit?1:0)-s.litA)*Math.min(1,dt*2.2);
+    s.e+=((s.lit?.38:0)-s.e)*Math.min(1,dt*.35);s.flash=Math.max(0,s.flash-dt*1.4);
+    const en=s.e;
+    if(i===0){s.va+=en*9*dt;s.knead+=en*6*dt;}
+    else if(i===1){s.tickT+=dt*(.6+en*2.4);if(s.tickT>1&&en>.03){s.tickT=0;s.va+=TAU/8;s.hand+=TAU/12;s.hour+=TAU/144;if(en>.2&&Math.random()<.3)SND.tick();}
+      s.vaD=(s.vaD||0)+(s.va-(s.vaD||0))*Math.min(1,dt*14);s.handD=(s.handD||0)+(s.hand-(s.handD||0))*Math.min(1,dt*12);}
+    else{s.reel+=en*7*dt;}
+    const ventT=S.phase==='ret'?1:(i===2?clamp(en*2,0,1):en>.03?.6:0);
+    s.vent+=(ventT-s.vent)*Math.min(1,dt*3);
+    s.shake=0;
+    // 羽根の風が風車へ：回り方が変わる（最後に届けた店）
+    if(S.phase==='play'&&s.lit&&S.mode===i&&en>.05){
+      s.puffT=(s.puffT||0)+dt;const iv=i===0?.7:i===1?1.0:1.7;
+      if(s.puffT>iv){s.puffT=0;const p0=[G.shopW[i].vc[0],G.shopW[i].vc[1]];const p3=[L.big.x+L.big.r*.3,L.big.y+L.big.r*.5];
+        addW({lane:[p0,[p0[0],p0[1]-120*u],[p3[0]+50*u,p3[1]+90*u],p3],u:0,sp:i===2?.55:.9,p:0,to:'big',w:.55,off:0,kind:1,shop:i});}
+    }
+    if(i===0&&en>.15&&Math.random()<en*dt*3){const sw=G.shopW[0];addP({k:'steam',x:sw.x+127*sw.sc,y:sw.y+6*sw.sc,vx:rnd(-4,4),vy:-rnd(14,24),age:0,life:1.3,r:rnd(3,5)*u});}
+  }
+  // 風見：最後に届けた店のほうへ
+  if(S.mode>=0){const sw=G.shopW[S.mode];S.vaneT=Math.atan2(sw.wc[1]-L.vane[1],sw.wc[0]-L.vane[0]);}
+  let dv=S.vaneT-S.vane;while(dv>PI)dv-=TAU;while(dv<-PI)dv+=TAU;S.vane+=dv*Math.min(1,dt*2.5);
+  // ---- 一周：返り風 ----
+  if(S.retAt&&t>=S.retAt){S.retAt=0;startReturn();}
+  if(S.phase==='ret'){const r=S.ret;r.t+=dt;
+    for(let k=0;k<3;k++){if(!r.fired[k]&&r.t>.9+k*.85){r.fired[k]=1;const i=r.order[k];
+      for(let j=0;j<7;j++)addW({lane:G.ret[i],u:-j*.06,sp:i===2?.6:i===0?1.05:.8,p:0,to:'big',w:1.6,off:rnd(-9,9)*u,kind:2,shop:i});
+      SND.ret(k);S.shops[i].flash=1;}}
+    if(r.t>3.4&&!r.big){r.big=true;S.revMode=r.order[2];SND.finale();S.townGlow=1;S.friend.cheerT=t;
+      sparks(L.big.x,L.big.y,20,160);log('reverse',['bakery','clock','cinema'][S.revMode]);
+      const cinIdx=r.order.indexOf(2);
+      const pr=cinIdx===2?.6:.2;if(Math.random()<pr)startShadow();}
+    if(r.t>8.2){S.phase='play';S.ret=null;S.cycles++;S.order=[];
+      for(const s of S.shops){s.lit=false;}S.revMode=-1;log('cycleEnd',S.cycles);}
+  }
+  S.townGlow=Math.max(0,S.townGlow-dt*.18);
+  if(S.shadow>0&&t-S.shadowT>6)S.shadow=Math.max(0,S.shadow-dt*.8);
+  // ---- 友達の視線 ----
+  const fr0=S.friend;let lx,ly;
+  if(t-fr0.evT<1.6){lx=fr0.evX;ly=fr0.evY;}
+  else if(S.lights.some(l=>l.st==='go')){const l=S.lights.find(l=>l.st==='go');const p=lightPos(l);lx=p[0];ly=p[1];}
+  else{const g=guide();const tp=targetPoint(g);if(tp){lx=tp[0];ly=tp[1];}else{lx=L.big.x;ly=L.big.y;}}
+  if(!f.out){lx=G.FS[0];ly=G.FS[1];if(Math.sin(t*1.3)>.3){const n=nozzleInfo();lx=n.bx;ly=n.by;}}
+  const ax=lx-L.win.x,ay=ly-L.win.y,al=Math.max(1,hyp(ax,ay));
+  fr0.lx+=(ax/al-fr0.lx)*Math.min(1,dt*6);fr0.ly+=(ay/al-fr0.ly)*Math.min(1,dt*6);
+  // ---- 揺れ ----
+  for(const k in S.shk){S.shk[k]=Math.max(0,S.shk[k]-dt*2.2);}
+  // ---- パーティクル ----
+  const P=S.parts;
+  for(let i=P.length-1;i>=0;i--){const p=P[i];p.age+=dt;if(p.age<0)continue;
+    if(p.k==='w'){p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
+      if(p.age>=p.life){P.splice(i,1);if(Math.random()<.35)splash(p.x,p.y,1,70*u,2*u);continue;}}
+    else if(p.k==='roll'){p.u+=dt*p.sp;if(p.u>=1){P.splice(i,1);continue;}}
+    else if(p.k==='drop'){p.vy+=700*u*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
+      const c=p.c===1?L.c1:L.c2,cs=p.c===1?S.c1:S.c2;
+      const up=p.c===1?S.c1.f>.5:true;
+      const ang=catcherAngle(p.c);
+      // 布の上の高さ
+      const tx=c.x+Math.cos(ang)*c.len,ty=c.y+Math.sin(ang)*c.len;
+      const tt=clamp((p.x-c.x)/(tx-c.x||1),0,1);const yy=c.y+(ty-c.y)*tt;
+      if(!p.slide&&p.y>=yy-2&&Math.abs(tx-c.x)>4&&tt>0&&tt<1){
+        if(up){splash(p.x,yy,1,60*u,1.8*u);P.splice(i,1);continue;}
+        else{p.slide=1;p.vx=(tx-c.x)>0?40:-40;p.vy=40;}
+      }
+      const gy=L.ground-2;if(p.y>=gy){P.splice(i,1);if(Math.random()<.3)splash(p.x,gy,1,40*u,1.6*u);
+        if(p.c===2)S.pud2=Math.min(1,S.pud2+.02);continue;}}
+    else{p.x+=p.vx*dt;p.y+=p.vy*dt;
+      if(p.k==='sp')p.vy+=600*u*dt;else if(p.k==='spark'){p.vx*=.96;p.vy*=.96;}
+      if(p.age>=p.life){P.splice(i,1);continue;}}
+  }
+  // ---- お手本の手 ----
+  const g=guide();const key=g?g.k:'';
+  const dm=S.demo;
+  if(dm.active){dm.t+=dt;if(dm.t>(dm.long?3.2:2.0))dm.active=false;}
+  else if(g&&!h.down&&t-S.lastInput>4&&!dm.done[key]&&S.phase==='play'){dm.done[key]=1;dm.active=true;dm.t=0;dm.key=key;dm.g=g;dm.long=!!g.long;log('demo',key);}
+  h.demoSq=0;
+  if(dm.active&&dm.g.type==='hose'){const pt=demoPress();h.demoSq=pt;}
+}
+function demoPress(){const d=S.demo,t=d.t;const holdE=d.long?2.4:1.1;
+  if(t<.6)return 0;if(t<.75)return (t-.6)/.15;if(t<holdE)return 1;if(t<holdE+.15)return 1-(t-holdE)/.15;return 0;}
+function catcherAngle(idx){
+  if(idx===1){const c=S.c1;const rest=lerp(112,166,c.f);return lerp(rest,252,clamp(c.open,0,1.1)*c.f)*D2R;}
+  const c=S.c2;return lerp(166,252,clamp(c.open,0,1.1))*D2R;
+}
+
+// ===================== 背景（静的）を事前描画 =====================
+function buildBG(){
+  bg=document.createElement('canvas');bg.width=cv.width;bg.height=cv.height;
+  bgx=bg.getContext('2d');
+  ctx=bgx;
+  try{ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=C.bg;ctx.fillRect(0,0,bg.width,bg.height);setT(ctx);drawStatic();}
+  finally{ctx=mainCtx;}
+}
+function drawStatic(){
+  const u=L.u,x0=-OX/K-4,x1=(W-OX)/K+4,y0=-OY/K-4,y1=(H-OY)/K+4;
+  // 空
+  ctx.fillStyle=C.sky;ctx.fillRect(x0,y0,x1-x0,L.ground-y0);
+  // 彫り込みの雲
+  const clouds=portrait?[[60,60,1],[150,150,.7],[360,60,.8]]:[[120,70,1.2],[330,50,.9],[930,70,1],[540,40,.7]];
+  for(const [cx,cy,s] of clouds){Rc(2.5,C.sky,()=>{T(cx,cy,s*u);circ(-18,4,13);circ(0,-4,17);circ(20,4,12);ctx.rect(-18,4,38,13);U();});}
+  // 丘（彫り込み）
+  const hl=L.hill;
+  Rc(3,C.hill,()=>{ctx.ellipse(hl.cx,hl.cy,hl.rx,hl.ry,0,PI,TAU);ctx.lineTo(hl.cx+hl.rx,L.ground);ctx.lineTo(hl.cx-hl.rx,L.ground);ctx.closePath();});
+  // 地面と道
+  ctx.fillStyle=C.mid;ctx.fillRect(x0,L.ground,x1-x0,y1-L.ground);
+  Rc(3,C.dim,()=>{ctx.rect(x0-10,L.road[0],x1-x0+20,L.road[1]-L.road[0]);});
+  Gv(1.6,()=>{for(let x=Math.floor(x0/40)*40;x<x1;x+=40){ctx.moveTo(x,(L.road[0]+L.road[1])/2);ctx.lineTo(x+18,(L.road[0]+L.road[1])/2);}});
+  if(!portrait){Rc(2,C.mid,()=>{ctx.rect(x0-10,L.ground,x1-x0+20,6);});}
+  // 発電所と風車の塔
+  const st=L.station,b=L.big,sm=L.small;
+  R(4,C.mid,()=>{ctx.moveTo(b.x-9*u,b.y);ctx.lineTo(b.x+9*u,b.y);ctx.lineTo(b.x+20*u,st.y0+2);ctx.lineTo(b.x-20*u,st.y0+2);ctx.closePath();});
+  Gv(1.4,()=>{for(let k=1;k<5;k++){const yy=lerp(b.y+10,st.y0,k/5),hw=lerp(9,20,k/5)*u;ctx.moveTo(b.x-hw,yy);ctx.lineTo(b.x+hw,yy);}});
+  R(4,C.base,()=>{rr(st.x0,st.y0,st.x1-st.x0,st.y1-st.y0,6*u);});
+  R(3,C.mid,()=>{ctx.moveTo(st.x0-6*u,st.y0+4);ctx.lineTo((st.x0+st.x1)/2,st.y0-16*u);ctx.lineTo(st.x1+6*u,st.y0+4);ctx.closePath();});
+  Rc(2.5,C.dim,()=>{rr((st.x0+st.x1)/2-11*u,st.y1-30*u,22*u,30*u,8*u);});
+  // 小さな風車の柱
+  R(3,C.mid,()=>{ctx.moveTo(sm.x-4*u,sm.y);ctx.lineTo(sm.x+4*u,sm.y);ctx.lineTo(sm.x+8*u,sm.base);ctx.lineTo(sm.x-8*u,sm.base);ctx.closePath();});
+  // 家
+  const h=L.house;
+  R(4,C.base,()=>{ctx.rect(h.x0,h.eave,h.x1-h.x0,h.ground-h.eave);});
+  R(4,C.mid,()=>{ctx.moveTo(h.x0-h.ov,h.eave+3);ctx.lineTo(h.px,h.py);ctx.lineTo(h.x1+h.ov,h.eave+3);ctx.closePath();});
+  Gv(1.6,()=>{for(let k=1;k<4;k++){const tt=k/4;const yy=lerp(h.py,h.eave,tt);const hw=(h.x1-h.x0)/2*tt+h.ov*tt;ctx.moveTo(h.px-hw+6,yy);ctx.lineTo(h.px+hw-6,yy);}});
+  // 煙突
+  // 一階：扉と小窓
+  const hw=h.x1-h.x0;
+  Rc(3,C.dim,()=>{rr(h.x0+hw*.14,h.ground-62*u,hw*.26,62*u,10*u);});
+  Rc(3,C.dim,()=>{rr(h.x0+hw*.58,h.ground-70*u,hw*.28,34*u,5*u);});
+  // 二階の窓の彫り込み（友達のいる部屋）
+  const wn=L.win;
+  Rc(3.5,C.dim,()=>{rr(wn.x-wn.w/2,wn.y-wn.h/2,wn.w,wn.h,6*u);});
+  // 雨どい・縦どい
+  const gt=L.gutter,sp=L.spout;
+  R(3,C.mid,()=>{rr(gt.x0,gt.y-5*u,gt.x1-gt.x0,13*u,5*u);});
+  Rc(1.5,C.dim,()=>{rr(gt.x0+3,gt.y-3*u,gt.x1-gt.x0-6,6*u,3*u);});
+  R(3,C.mid,()=>{ctx.rect(sp.x-5*u,sp.y0,10*u,sp.y1-sp.y0);});
+  RS(3,10*u,C.mid,()=>{ctx.moveTo(sp.x,sp.y1-4*u);ctx.quadraticCurveTo(sp.x,sp.my-2*u,sp.mx,sp.my-2*u);});
+  // 隣の溝（樋から斜めに続く）
+  const tr=L.trough;
+  RS(3,11*u,C.mid,()=>{ctx.moveTo(tr.x0,tr.y0);ctx.lineTo(tr.x1,tr.y1);});
+  Gv(3*u,()=>{ctx.moveTo(tr.x0+6,tr.y0+(tr.y1-tr.y0)*.04-1);ctx.lineTo(tr.x1-2,tr.y1-1);});
+  // 支柱
+  RS(2,3*u,C.low,()=>{const mx=(tr.x0+tr.x1)/2,my=(tr.y0+tr.y1)/2;ctx.moveTo(mx,my+4);ctx.lineTo(mx,my+40*u);});
+  // 風受けの柱
+  for(const c of[L.c1,L.c2]){R(3,C.mid,()=>{ctx.rect(c.x-4*u,c.y,8*u,L.ground-c.y);});R(3,C.mid,()=>{rr(c.x-12*u,L.ground-8*u,24*u,8*u,3*u);});}
+  // 店（本体）
+  for(let i=0;i<3;i++)shopStatic(i);
+  // 札の板（彫り込み）
+  const bd=L.board;
+  Rc(3.5,C.dim,()=>{rr(bd.x0,bd.y0,bd.x1-bd.x0,bd.y1-bd.y0,10*u);});
+}
+
+function shopStatic(i){
+  const s=G.shopW[i];
+  // ローカル 160x190
+  const B=(fn)=>()=>{T(s.x,s.y,s.sc);fn();U();};
+  R(4,C.base,B(()=>ctx.rect(8,58,144,132)));
+  if(i===0){
+    R(4,C.mid,B(()=>ctx.rect(118,6,20,46)));
+    R(4,C.mid,B(()=>{ctx.moveTo(0,64);ctx.bezierCurveTo(0,10,160,10,160,64);ctx.closePath();}));
+    const sc=[];for(let k=0;k<8;k++)sc.push([s.x+(14+k*19)*s.sc,s.y+66*s.sc,9*s.sc]);
+    beads(sc,C.mid,C.sh,C.hi,2.5);
+  }else if(i===1){
+    R(4,C.mid,B(()=>{ctx.moveTo(-2,64);ctx.lineTo(80,2);ctx.lineTo(162,64);ctx.closePath();}));
+    Gv(1.5,B(()=>{ctx.moveTo(30,50);ctx.lineTo(130,50);}));
+  }else{
+    R(4,C.mid,B(()=>ctx.rect(2,42,156,22)));
+    R(4,C.mid,B(()=>ctx.rect(26,18,108,26)));
+    R(3,C.mid,B(()=>ctx.rect(58,4,44,16)));
+  }
+  // 主窓（灯りを受ける窓）と丸窓（羽根）と扉
+  Rc(3.5,C.low,B(()=>rr(18,80,92,62,6)));
+  Rc(3,C.low,B(()=>circ(132,96,16)));
+  Rc(3,C.dim,B(()=>rr(118,124,28,66,10)));
+  R(2,C.mid,B(()=>ctx.rect(14,142,100,8)));
+}
+
+// ===================== 描画（動的） =====================
+function frame(){
+  ctx=mainCtx;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.drawImage(bg,0,0);
+  setT(ctx);
+  const u=L.u,t=S.t;
+  const g=S.phase==='play'?guide():null;
+  const pulse=.5+.5*Math.sin(t*5);
+  const steps=[()=>drawHillThings(g),drawRoutes,drawWinds,()=>drawHouse(g),drawWaterOnRoof,drawCatchers,drawWaterParts,drawShops,()=>drawCards(g,pulse),()=>drawTruck(g,pulse),drawLights,drawSparks,drawHand];
+  if(PROF){for(let i=0;i<steps.length;i++){const a=performance.now();steps[i]();PROF[i]=(PROF[i]||0)+performance.now()-a;}}
+  else for(const f of steps)f();
+}
+let PROF=null;
+
+function shk(k){const v=S.shk[k]||0;return v?Math.sin(S.t*40)*v*2.2:0;}
+
+function drawHillThings(g){
+  const u=L.u,b=L.big,sm=L.small,st=L.station,t=S.t;
+  // 発電所の灯（一周後に明るく）
+  const glow=Math.max(S.townGlow,S.cycles>0?.35:0);
+  R(2.5,glow>0?mix('base','accHi',glow):C.base,()=>{circ((st.x0+st.x1)/2,st.y0+18*u,8*u);});
+  // 風見（風向き）
+  const vx=L.vane[0],vy=L.vane[1];
+  RS(2,2.4*u,C.low,()=>{ctx.moveTo(vx,vy+14*u);ctx.lineTo(vx,vy-6*u);});
+  R(2,C.base,()=>{T(vx,vy-6*u,u,S.vane);ctx.moveTo(14,0);ctx.lineTo(4,-5);ctx.lineTo(-12,-4);ctx.lineTo(-16,-9);ctx.lineTo(-14,0);ctx.lineTo(-16,9);ctx.lineTo(-12,4);ctx.lineTo(4,5);ctx.closePath();U();});
+  // 大きな風車
+  const sx=shk('big');
+  drawMill(b.x+sx,b.y,b.r,S.big.disp,4,Math.abs(S.big.om));
+  // 小さな風車
+  drawMill(sm.x+shk('small'),sm.y,sm.r,S.small.a,3,Math.abs(S.small.om));
+  // 返風中の大きな輪
+  if(S.phase==='ret'&&S.ret&&S.ret.t>3.4){const k=clamp((S.ret.t-3.4)/1.2,0,1);
+    ctx.save();ctx.globalAlpha=1-k;RS(2,3*u,C.accHi,()=>{circ(b.x,b.y,b.r*(.6+k*.7));},C.accLo,C.accEdge);ctx.restore();}
+}
+function drawMill(x,y,r,a,d,om){
+  const u=L.u;
+  for(let k=0;k<4;k++){const aa=a+k*TAU/4;
+    R(d,C.base,()=>{T(x,y,1,aa);ctx.moveTo(r*.14,-3*u);ctx.lineTo(r,-r*.17);ctx.lineTo(r*1.0,r*.04);ctx.lineTo(r*.14,3*u);ctx.closePath();U();});
+    Gv(Math.max(1,r*.025),()=>{T(x,y,1,aa);for(let j=1;j<4;j++){const xx=r*(.3+j*.18);ctx.moveTo(xx,-r*.15*(xx/r)-1);ctx.lineTo(xx,r*.02);}ctx.moveTo(r*.2,-r*.05);ctx.lineTo(r*.95,-r*.08);U();});
+  }
+  R(d,C.mid,()=>{circ(x,y,r*.16);});
+  R(2,C.base,()=>{circ(x,y,r*.07);});
+}
+function drawRoutes(){
+  // 選んだ札の店への「灯りの通り道」を彫り込みの点で
+  if(S.sel<0)return;const u=L.u;
+  const k=clamp((S.t-S.selT)*2,0,1);
+  for(let src=0;src<2;src++){if(src===1&&!S.small.ever)continue;
+    const r=G.route[src][S.sel];const pts=[];
+    const n=20;for(let i=1;i<n;i++){if(i/n>k)break;const p=bz(r[0],r[1],r[2],r[3],i/n);pts.push([p[0],p[1],(src?1.6:2)*u]);}
+    beads(pts,C.dim,C.hi,C.sh,1.5);
+  }
+}
+function drawWinds(){
+  const u=L.u;
+  for(const w of S.winds){if(w.u<=0)continue;const l=w.lane;
+    const a=clamp(w.u-.16*w.w,0,1),b=clamp(w.u,0,1);
+    const N=8,p=[];
+    for(let i=0;i<=N;i++){const uu=lerp(a,b,i/N);const q=bz(l[0],l[1],l[2],l[3],uu),q2=bz(l[0],l[1],l[2],l[3],Math.min(1,uu+.01));
+      let nx=-(q2[1]-q[1]),ny=q2[0]-q[0];const nl=Math.hypot(nx,ny)||1;nx/=nl;ny/=nl;
+      const wv=Math.sin(uu*26+S.t*9+w.off)*3.2*u;p.push([q[0]+nx*(wv+w.off),q[1]+ny*(wv+w.off),nx,ny]);}
+    const isRet=w.kind===2,isVent=w.kind===1;
+    const col=isRet?C.accHi:C.base;
+    const wd=(isRet?4.4:isVent?2.4:3.4)*u;
+    const dash=isVent&&w.shop===1;
+    const lines=isRet?3:2,gap=(isRet?9:7)*u;
+    RS(isRet?2.5:2,wd,col,()=>{
+      for(let s2=0;s2<lines;s2++){const o=(s2-(lines-1)/2)*gap;
+        if(dash){for(let i=0;i<N;i+=3){ctx.moveTo(p[i][0]+p[i][2]*o,p[i][1]+p[i][3]*o);ctx.lineTo(p[i+1][0]+p[i+1][2]*o,p[i+1][1]+p[i+1][3]*o);}}
+        else{ctx.moveTo(p[0][0]+p[0][2]*o,p[0][1]+p[0][3]*o);for(let i=1;i<=N;i++)ctx.lineTo(p[i][0]+p[i][2]*o,p[i][1]+p[i][3]*o);}
+      }
+    },isRet?C.accLo:C.sh,isRet?C.accEdge:C.hi);
+    if(isVent&&w.shop===0){beads([[p[N][0],p[N][1],4.5*u]],C.base);}
+  }
+}
+function drawFire(){
+  const f=S.fire;if(f.out)return;const u=L.u,t=S.t;
+  const sz=(.42+.58*clamp(f.hp,0,1))*(1-.35*f.sink)*u;
+  const x=G.FS[0]+shk('fire'),y=G.FS[1]+4*u;
+  const fl=(o,ph,hh,ww)=>()=>{T(x+o*sz,y,sz);const k=Math.sin(t*9+ph)*3;ctx.moveTo(-ww,0);ctx.quadraticCurveTo(-ww-2,-hh*.5,k,-hh);ctx.quadraticCurveTo(ww+2,-hh*.5,ww,0);ctx.closePath();U();};
+  R(3,C.acc,fl(-9,0,24,8),C.accSh,C.accEdge);
+  R(3,C.acc,fl(9,1.7,22,7),C.accSh,C.accEdge);
+  R(3,C.acc,fl(0,3.1,34,10),C.accSh,C.accEdge);
+  R(2,C.accHi,fl(0,3.1,18,5),C.accLo,C.accEdge);
+}
+function drawHouse(g){
+  const u=L.u,t=S.t,wn=L.win,W2=wn.w/2,H2=wn.h/2;
+  drawFire();
+  // 部屋の明かり（救助後・返風で）
+  const room=Math.max(S.townGlow*.8,S.fire.out?.15:0);
+  if(room>0){ctx.fillStyle=mix('dim','accHi',room);ctx.beginPath();rr(wn.x-W2+3,wn.y-H2+3,wn.w-6,wn.h-6,4*u);ctx.fill();}
+  // 友達（人形）
+  drawFriend();
+  // 窓枠（片開き：左ちょうつがい）
+  const op=S.win.open;
+  const fx=wn.x-W2,fw=wn.w*(1-op*.8);
+  const dx=-op*wn.w*.18;
+  R(3,C.base,()=>{ctx.moveTo(fx+dx*.0,wn.y-H2);ctx.lineTo(fx+fw+dx,wn.y-H2-op*6*u);ctx.lineTo(fx+fw+dx,wn.y+H2+op*6*u);ctx.lineTo(fx,wn.y+H2);ctx.closePath();
+    const ix=fx+5*u,iw=fw-10*u;if(iw>2){ctx.moveTo(ix,wn.y-H2+5*u);ctx.lineTo(ix,wn.y+H2-5*u);ctx.lineTo(ix+iw+dx,wn.y+H2-5*u+op*4*u);ctx.lineTo(ix+iw+dx,wn.y-H2+5*u-op*4*u);ctx.closePath();}});
+  // 窓台
+  R(3,C.mid,()=>{rr(wn.x-W2-6*u,wn.y+H2-2,wn.w+12*u,8*u,3*u);});
+  // ロープ：窓の右上の滑車→風受け１
+  const px=wn.x+W2+6*u,py=wn.y-H2+6*u;
+  R(2,C.mid,()=>{circ(px,py,5*u);});
+  const c=L.c1,ang=catcherAngle(1);
+  const ax=c.x+Math.cos(ang)*c.len*.5,ay=c.y+Math.sin(ang)*c.len*.5;
+  const sag=lerp(46,6,S.win.open)*u;
+  RS(1.5,2.2*u,C.low,()=>{ctx.moveTo(px,py);ctx.quadraticCurveTo((px+ax)/2,Math.max(py,ay)+sag,ax,ay);});
+}
+function drawFriend(){
+  const u=L.u,t=S.t,wn=L.win,s=wn.w/66;
+  const sx=shk('friend');
+  const cheer=clamp(1-(t-S.friend.cheerT)/1.2,0,1);
+  const bob=Math.sin(clamp((t-S.friend.cheerT)/1.2,0,1)*PI*3)*cheer*3;
+  const x=wn.x+sx,y=wn.y+4*s-bob*s;
+  const happy=S.fire.out;
+  ctx.save();ctx.beginPath();rr(wn.x-wn.w/2+3,wn.y-wn.h/2+3,wn.w-6,wn.h-6,4*u);ctx.clip();
+  // 体
+  R(3,C.mid,()=>{T(x,y,s);ctx.moveTo(-17,34);ctx.quadraticCurveTo(-16,8,0,6);ctx.quadraticCurveTo(16,8,17,34);ctx.closePath();U();});
+  // 腕：手を振る
+  const wave=clamp(1-(t-S.friend.waveT)/2.6,0,1)*(t>=S.friend.waveT?1:0);
+  const armA=(-2.4+Math.sin(t*12)*.45)*Math.max(wave,cheer)+(.4)*(1-Math.max(wave,cheer));
+  RS(2.5,6*s,C.base,()=>{T(x,y,s);ctx.moveTo(12,14);ctx.lineTo(12+Math.cos(armA)*16,14+Math.sin(armA)*16);U();});
+  if(cheer>0){RS(2.5,6*s,C.base,()=>{T(x,y,s);const a2=-PI-armA;ctx.moveTo(-12,14);ctx.lineTo(-12+Math.cos(a2)*16,14+Math.sin(a2)*16);U();});}
+  ctx.restore();
+  // 頭（窓枠に隠れないよう窓の中央）
+  R(3,C.mid,()=>{T(x,y,s);circ(0,-26,8);U();}); // おだんご
+  R(3,C.base,()=>{T(x,y,s);circ(0,-8,15);U();});
+  R(2,C.mid,()=>{T(x,y,s);ctx.moveTo(-15,-9);ctx.quadraticCurveTo(-14,-25,0,-24);ctx.quadraticCurveTo(14,-25,15,-9);ctx.quadraticCurveTo(6,-17,0,-15);ctx.quadraticCurveTo(-6,-17,-15,-9);ctx.closePath();U();});
+  // 目（視線）
+  const lx=S.friend.lx*2.4,ly=S.friend.ly*2;
+  const blink=(Math.sin(t*.9)>.985)?.3:1;
+  ctx.fillStyle=C.sh;ctx.beginPath();
+  for(const ex of[-5.5,5.5]){ctx.ellipse(x+(ex+lx)*s,y+(-7+ly)*s,1.9*s,2.3*s*blink,0,0,TAU);}ctx.fill();
+  // ほっぺ
+  ctx.fillStyle=C.accHi;ctx.beginPath();circ(x-9*s,y-1*s,2.4*s);circ(x+9*s,y-1*s,2.4*s);ctx.fill();
+  // 口
+  Gv(1.6*s,()=>{T(x,y,s);if(happy){ctx.moveTo(-4,-1);ctx.quadraticCurveTo(0,4+cheer*2,4,-1);}else{ctx.moveTo(-2.4,1.5);ctx.arc(0,1.5,2.4,PI,PI*3);}U();});
+}
+function drawWaterOnRoof(){
+  const u=L.u,t=S.t;
+  // 屋根にたまる水
+  const n=Math.min(14,Math.round(S.pool*9));const pl=[];
+  for(let i=0;i<n;i++){const a=i*2.4;pl.push([G.FS[0]+Math.cos(a)*(4+i*1.2)*u,G.FS[1]+6*u+Math.sin(a)*2.5*u+(i%3)*1.5*u,(2.4+(i%2))*u]);}
+  // 流れる粒
+  for(const p of S.parts){if(p.k!=='roll')continue;const q=lerpP(G.FS,G.GE,p.u);pl.push([q[0],q[1]-2*u,p.r]);}
+  // 水の塊
+  for(const b of S.blobs){let q;if(b.u<1)q=lerpP(G.FS,G.GE,b.u);else{const j=b.jump;q=[G.GE[0]+j*4*u,G.GE[1]-Math.sin(j*PI)*14*u-2];}
+    const r=(4+Math.sqrt(b.amt)*6)*u;pl.push([q[0],q[1]-r*.6,r]);}
+  // 雨どいの水
+  const gt=L.gutter;const gn=Math.round(clamp(S.gutter/S.cap,0,1)*10);
+  for(let i=0;i<gn;i++){pl.push([gt.x1-6*u-i*(gt.x1-gt.x0-10)/10,gt.y-2*u+Math.sin(t*6+i)*.8,3*u]);}
+  if(S.gutter>S.cap*.95){pl.push([gt.x1+2*u,gt.y-6*u+Math.sin(t*8)*1.5,3.4*u]);}
+  // 溝の水
+  const tr=L.trough;const tn=Math.round(clamp(S.trough*12,0,9))+(S.overflowEver?1:0);
+  for(let i=0;i<tn;i++){const k=((i/9)+t*.6)%1;pl.push([lerp(tr.x0,tr.x1,k),lerp(tr.y0,tr.y1,k)-3*u,2.6*u]);}
+  beads(pl,C.base,C.sh,C.hi,2);
+  // あふれ口（一度あふれたら口が開いたまま）
+  if(S.lipBend>.02){R(2,C.mid,()=>{T(gt.x1,gt.y-4*u,u,-S.lipBend*.6);ctx.rect(-2,-8,6,10);U();});}
+}
+function lerpP(a,b,t){return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];}
+function drawCatchers(){
+  const u=L.u;
+  for(const idx of[1,2]){const c=idx===1?L.c1:L.c2,cs=idx===1?S.c1:S.c2;
+    const a=catcherAngle(idx)+(shk('c'+idx)*.03);
+    const tx=c.x+Math.cos(a)*c.len,ty=c.y+Math.sin(a)*c.len;
+    const op=clamp(cs.open,0,1);
+    const bul=(13+op*9)*u*(idx===1?1:.9);
+    const nx=Math.cos(a-PI/2),ny=Math.sin(a-PI/2);
+    const side=(Math.sin(a)<0)?1:-1; // ふくらむ向き
+    const ex=nx*bul*side,ey=ny*bul*side;
+    // 布（帆）
+    R(3,C.base,()=>{ctx.moveTo(c.x,c.y);ctx.lineTo(tx,ty);ctx.quadraticCurveTo(tx+ex*1.1,ty+ey*1.1,(c.x+tx)/2+ex*1.35,(c.y+ty)/2+ey*1.35);ctx.quadraticCurveTo(c.x+ex*.9,c.y+ey*.9,c.x,c.y);ctx.closePath();});
+    Gv(1.3*u,()=>{for(const k of[.33,.66]){const mx=c.x+(tx-c.x)*k,my=c.y+(ty-c.y)*k;ctx.moveTo(mx,my);ctx.lineTo(mx+ex*1.05,my+ey*1.05);}});
+    // 竿
+    RS(2.5,4*u,C.mid,()=>{ctx.moveTo(c.x,c.y);ctx.lineTo(tx,ty);});
+    R(2.5,C.mid,()=>{circ(c.x,c.y,6*u);});
+  }
+  // 水たまり
+  for(const [p,v] of[[L.pud1,S.pud1],[L.pud2,S.pud2]]){if(v<.02)continue;const w=(10+v*26)*L.u;
+    Rc(2,C.dim,()=>{ctx.ellipse(p[0],p[1]+3*L.u,w,4*L.u+v*2,0,0,TAU);});}
+}
+function drawWaterParts(){
+  const u=L.u,wl=[],sp=[],st=[];
+  for(const p of S.parts){if(p.age<0)continue;
+    if(p.k==='w'||p.k==='drop'){wl.push([p.x,p.y,p.r]);}
+    else if(p.k==='sp'){const k=1-p.age/p.life;sp.push([p.x,p.y,p.r*k+.3]);}
+    else if(p.k==='steam'){const k=p.age/p.life;st.push([p.x,p.y,p.r*(1-k*.6)]);}}
+  beads(wl,C.base,C.sh,C.hi,2);beads(sp,C.base,C.sh,C.hi,1.5);
+  if(st.length){ctx.save();ctx.globalAlpha=.8;beads(st,C.sky,C.dim,C.hi,2);ctx.restore();}
+}
+function drawShops(){
+  const u=L.u,t=S.t;
+  for(let i=0;i<3;i++){const s=G.shopW[i],st=S.shops[i];
+    const sx=shk('shop'+i);
+    const B=(fn)=>()=>{T(s.x+sx,s.y,s.sc);fn();U();};
+    const lit=st.litA,fl=st.flash;
+    // 主窓の中
+    ctx.fillStyle=mix('low','accHi',lit*.95);ctx.beginPath();B(()=>rr(20,82,88,58,5))();ctx.fill();
+    if(fl>0){ctx.save();ctx.globalAlpha=fl*.8;ctx.fillStyle=C.accEdge;ctx.beginPath();B(()=>rr(20,82,88,58,5))();ctx.fill();ctx.restore();}
+    const ret=S.phase==='ret'&&S.ret?clamp((S.ret.t)/.8,0,1):0;
+    if(ret>0&&S.ret.order.indexOf(i)>=0){drawVentWindow(s,i,ret,sx);}
+    else{
+      if(i===0)drawKnead(s,st,sx);else if(i===1)drawGears(s,st,sx);else drawProjector(s,st,sx);
+    }
+    // 丸窓の羽根
+    drawVent(s,st,i,sx);
+    // 店の特徴
+    if(i===0){iconBread(s.x+sx+80*s.sc,s.y+40*s.sc,s.sc*1.15);}
+    else if(i===1){
+      // 屋根の影（針と一緒に動く）
+      const m=st.handD||0;const sh=(10+22*(.5+.5*Math.sin(m)))*s.sc,ox=Math.cos(m)*40*s.sc;
+      ctx.save();ctx.globalAlpha=.6;ctx.fillStyle=C.low;ctx.beginPath();
+      B(()=>{const hh=sh/s.sc,xx=ox/s.sc;ctx.moveTo(8,64);ctx.lineTo(152,64);ctx.lineTo(152,64+hh*.5);ctx.lineTo(80+xx,64+hh+8);ctx.lineTo(8,64+hh*.5);ctx.closePath();})();ctx.fill();ctx.restore();
+      iconClock(s.x+sx+80*s.sc,s.y+38*s.sc,s.sc*1.2,(st.handD||0)-PI/2+.9,(st.hour||0)-PI/2-1.7);
+    }else{
+      // マーキーの電球
+      const bl=[],on=[];for(let k=0;k<9;k++){const bx=s.x+sx+(14+k*16.5)*s.sc,by=s.y+53*s.sc;const lt=lit>.5&&((Math.floor(t*4)+k)%3!==0);(lt?on:bl).push([bx,by,3.2*s.sc]);}
+      beads(bl,C.base,C.sh,C.hi,1.5);beads(on,C.accHi,C.accLo,C.accEdge,1.5);
+      iconProj(s.x+sx+80*s.sc,s.y+32*s.sc,s.sc*.95,st.reel);
+    }
+  }
+}
+function drawVent(s,st,i,sx){
+  const u=L.u,cx=s.x+sx+132*s.sc,cy=s.y+96*s.sc,r=14*s.sc;
+  const lit=st.litA;
+  ctx.fillStyle=mix('low','accHi',lit*.7);ctx.beginPath();circ(cx,cy,r);ctx.fill();
+  const n=i===2?6:4;
+  let ang=i===0?st.va:i===1?(st.vaD||0):0;
+  const open=i===2?st.vent:(i===1?.25:.3)+st.vent*.25;
+  for(let k=0;k<n;k++){const a=ang+k*TAU/n;
+    R(2,C.base,()=>{T(cx,cy,s.sc,a);if(i===2){const w=lerp(13,4,open);ctx.moveTo(0,0);ctx.lineTo(13,-w*.5);ctx.lineTo(13,w*.5);ctx.closePath();}
+      else{ctx.ellipse(7,0,7,lerp(5,2.2,open),0,0,TAU);}U();});}
+  R(1.5,C.mid,()=>{circ(cx,cy,3*s.sc);});
+}
+function drawVentWindow(s,i,k,sx){
+  // 返風：窓が大きな送風口に
+  const cx=s.x+sx+64*s.sc,cy=s.y+111*s.sc,sc=s.sc;
+  for(let j=3;j>=1;j--){R(2.5,j%2?C.accHi:C.base,()=>{circ(cx,cy,j*8.5*sc*k);},C.accLo,C.accEdge);}
+  for(let j=0;j<6;j++){const a=j/6*TAU+S.t*(i===0?6:i===1?0:1.5)+(i===1?Math.floor(S.t*2)*.5:0);
+    R(2,C.base,()=>{T(cx,cy,sc,a);ctx.moveTo(4,0);ctx.lineTo(26*k,-6*k);ctx.lineTo(26*k,2);ctx.closePath();U();});}
+}
+function drawKnead(s,st,sx){
+  const B=(fn)=>()=>{T(s.x+sx,s.y,s.sc);fn();U();};
+  const ph=st.knead;
+  // 棚のパン
+  R(2,C.base,B(()=>{ctx.ellipse(36,96,9,5,0,0,TAU);ctx.ellipse(54,95,8,5,0,0,TAU);}));
+  // こね機：ボウルと生地とフック
+  const sq=Math.sin(ph*2)*3*Math.min(1,st.e*3);
+  R(3,C.base,B(()=>{ctx.ellipse(80,124,14+sq*.5,8-sq*.3,0,0,TAU);}));
+  R(2.5,C.mid,B(()=>{ctx.moveTo(60,122);ctx.lineTo(100,122);ctx.quadraticCurveTo(100,140,80,140);ctx.quadraticCurveTo(60,140,60,122);ctx.closePath();}));
+  RS(2,3,C.mid,B(()=>{ctx.moveTo(80,86);ctx.lineTo(80,100);const hx=Math.sin(ph)*9;ctx.quadraticCurveTo(80+hx,108,80+hx*.8,120);}));
+}
+function drawGears(s,st,sx){
+  const B=(fn)=>()=>{T(s.x+sx,s.y,s.sc);fn();U();};
+  const a=(st.handD||0)*1.5;
+  const gear=(x,y,r,n,aa)=>B(()=>{for(let k=0;k<n;k++){const q=aa+k/n*TAU;ctx.moveTo(x,y);ctx.arc(x,y,r,q-.18,q+.18);ctx.closePath();}circ(x,y,r*.78);});
+  R(2.5,C.base,gear(48,108,17,10,a));
+  R(2.5,C.base,gear(76,124,11,8,-a*1.55+.2));
+  Rc(1.5,C.mid,B(()=>circ(48,108,5)));
+  // 振り子
+  const pa=Math.sin(S.t*3)*.35*Math.min(1,st.e*3);
+  RS(2,2.4,C.mid,B(()=>{ctx.moveTo(96,86);ctx.lineTo(96+Math.sin(pa)*40,86+Math.cos(pa)*40);}));
+  R(2,C.base,B(()=>circ(96+Math.sin(pa)*40,86+Math.cos(pa)*40,6)));
+}
+function drawProjector(s,st,sx){
+  const B=(fn)=>()=>{T(s.x+sx,s.y,s.sc);fn();U();};
+  // 幕
+  R(2,C.base,B(()=>rr(64,88,40,44,2)));
+  const on=st.e>.06;
+  if(on){ctx.save();ctx.globalAlpha=.55*Math.min(1,st.e*3);ctx.fillStyle=C.accEdge;ctx.beginPath();B(()=>{ctx.moveTo(44,110);ctx.lineTo(66,90);ctx.lineTo(66,130);ctx.closePath();})();ctx.fill();ctx.restore();
+    // 影絵：手を振る友達／まれに風車
+    ctx.fillStyle=C.low;ctx.beginPath();
+    if(S.shadow>0){const a=S.big.disp;B(()=>{for(let k=0;k<4;k++){const q=a+k*TAU/4;ctx.moveTo(84,108);ctx.lineTo(84+Math.cos(q-.18)*17,108+Math.sin(q-.18)*17);ctx.lineTo(84+Math.cos(q+.12)*17,108+Math.sin(q+.12)*17);ctx.closePath();}circ(84,108,3);})();}
+    else{const wv=Math.sin(S.t*6)*.5;B(()=>{circ(84,104,6);ctx.rect(78,110,12,14);ctx.moveTo(90,112);ctx.lineTo(90+Math.cos(-1.9+wv)*11,112+Math.sin(-1.9+wv)*11);ctx.lineTo(92+Math.cos(-1.9+wv)*11,113+Math.sin(-1.9+wv)*11);ctx.lineTo(91,116);ctx.closePath();})();}
+    ctx.fill();}
+  iconProj(s.x+sx+38*s.sc,s.y+120*s.sc,s.sc*.8,st.reel);
+}
+function drawCards(g,pulse){
+  const u=L.u,t=S.t;
+  for(let i=0;i<3;i++){const c=L.cards[i];
+    const sel=S.sel===i,guided=g&&g.type==='card'&&g.i===i;
+    const bounce=guided?Math.abs(Math.sin(t*4.2))*5*u:0;
+    const pop=sel?clamp(1-(t-S.selT)*3,0,1):0;
+    const cw=L.cw*(1+pop*.08),ch=L.ch*(1+pop*.08);
+    const x=c[0],y=c[1]-bounce-(sel?3*u:0);
+    if(guided){RS(2,4*u,C.acc,()=>{rr(x-cw/2-5*u,y-ch/2-5*u,cw+10*u,ch+10*u,10*u);},C.accLo,C.accEdge);}
+    R(sel?4:3,sel?C.accHi:C.base,()=>{rr(x-cw/2,y-ch/2,cw,ch,8*u);},sel?C.accLo:C.sh,sel?C.accEdge:C.hi);
+    // 札を吊るす穴
+    Rc(1.5,C.mid,()=>{circ(x,y-ch/2+7*u,2.6*u);});
+    const sc=u*(portrait?.92:1.05);
+    if(i===0)iconBread(x,y+4*u,sc);else if(i===1)iconClock(x,y+4*u,sc*.95);else iconProj(x-1*u,y+8*u,sc*.95,S.shops[2].reel);
+    // 届いた店はしるし
+    if(S.shops[i].lit){R(2,C.acc,()=>{circ(x+cw/2-8*u,y-ch/2+8*u,4.5*u);},C.accLo,C.accEdge);}
+  }
+}
+function drawTruck(g,pulse){
+  const u=L.u,t=S.t,tk=L.truck,h=S.hose;
+  const guided=g&&g.type==='hose';
+  const sx=shk('truck');
+  const bounce=guided&&!h.down?Math.abs(Math.sin(t*4.2))*3*u:0;
+  const x0=tk.x0+sx,x1=tk.x1+sx,y0=tk.y0,y1=tk.y1,w=x1-x0,hh=y1-y0;
+  // 車体
+  R(4,C.base,()=>{rr(x0,y0+hh*.22,w,hh*.6,8*u);});
+  R(4,C.base,()=>{rr(x0,y0-hh*.05,w*.3,hh*.6,10*u);});
+  Rc(2.5,C.dim,()=>{rr(x0+w*.05,y0+hh*.03,w*.18,hh*.24,5*u);});
+  // はしご
+  RS(2,3*u,C.mid,()=>{ctx.moveTo(x0+w*.36,y0+hh*.12);ctx.lineTo(x0+w*.92,y0+hh*.12);ctx.moveTo(x0+w*.36,y0+hh*.22);ctx.lineTo(x0+w*.92,y0+hh*.22);for(let k=0;k<6;k++){const xx=lerp(x0+w*.4,x0+w*.9,k/5);ctx.moveTo(xx,y0+hh*.12);ctx.lineTo(xx,y0+hh*.22);}});
+  // 屋根のランプ
+  R(2.5,C.acc,()=>{rr(x0+w*.1,y0-hh*.15,w*.1,hh*.12,3*u);},C.accLo,C.accEdge);
+  // 車輪
+  for(const fx of[.2,.78]){R(4,C.mid,()=>{circ(x0+w*fx,y1-hh*.14,hh*.2);});R(2,C.base,()=>{circ(x0+w*fx,y1-hh*.14,hh*.08);});}
+  // 側面の彫り溝
+  Gv(1.6,()=>{ctx.moveTo(x0+w*.36,y0+hh*.52);ctx.lineTo(x0+w*.95,y0+hh*.52);});
+  // ホースのリール
+  const rx=L.reel[0]+sx,ry=L.reel[1];
+  R(4,C.mid,()=>{circ(rx,ry,16*u);});
+  Gv(1.6,()=>{for(let k=1;k<4;k++){ctx.moveTo(rx+k*4*u,ry);ctx.arc(rx,ry,k*4*u,0,TAU);}});
+  // ホース（太い・押すと縮み、伸び、震える）
+  const n=nozzleInfo();
+  const sq=Math.max(h.sq,h.demoSq*.6);
+  const hw=(13+sq*4)*u;
+  const H0=G.hose;
+  const p0=[H0[0][0]+sx,H0[0][1]],p1=[H0[1][0]+sx,H0[1][1]-bounce],p2=[H0[2][0],H0[2][1]-bounce],p3=[n.bx-Math.cos(n.a)*6*u,n.by-Math.sin(n.a)*6*u];
+  if(guided&&!h.down){RS(2,hw+8*u,C.acc,()=>{ctx.moveTo(p0[0],p0[1]);ctx.bezierCurveTo(p1[0],p1[1],p2[0],p2[1],p3[0],p3[1]);},C.accLo,C.accEdge);}
+  RS(4,hw,C.mid,()=>{ctx.moveTo(p0[0],p0[1]);ctx.bezierCurveTo(p1[0],p1[1],p2[0],p2[1],p3[0],p3[1]);});
+  Gv(1.4,()=>{ctx.moveTo(p0[0],p0[1]);ctx.bezierCurveTo(p1[0],p1[1]+hw*.25,p2[0],p2[1]+hw*.25,p3[0],p3[1]+hw*.2);});
+  // 押したときの水のこぶ
+  const rings=[];for(const r of h.rings){const q=bz(p0,p1,p2,p3,r);rings.push([q[0],q[1],hw*.62*(1-r*.3)]);}
+  beads(rings,C.mid,C.sh,C.hi,3);
+  // ノズル
+  R(4,C.base,()=>{T(n.bx,n.by,u,n.a);const l=n.len/u,ww=1+sq*.25;ctx.moveTo(-4,-10*ww);ctx.lineTo(l,-5*ww);ctx.lineTo(l,5*ww);ctx.lineTo(-4,10*ww);ctx.closePath();U();});
+  Gv(1.4,()=>{T(n.bx,n.by,u,n.a);ctx.moveTo(6,-8);ctx.lineTo(6,8);ctx.moveTo(12,-7);ctx.lineTo(12,7);U();});
+  if(guided&&!h.down){RS(2,3.5*u,C.acc,()=>{circ(n.tx,n.ty,(10+pulse*4)*u);},C.accLo,C.accEdge);}
+}
+function drawLights(){
+  const u=L.u;
+  for(const l of S.lights){const p=lightPos(l);const r=(l.src?7:9)*u*(l.st==='wait'?1+.08*Math.sin(S.t*6):1);
+    R(3,C.acc,()=>{circ(p[0],p[1],r);},C.accSh,C.accEdge);
+    R(1.5,C.accHi,()=>{circ(p[0]-r*.15,p[1]-r*.15,r*.55);},C.accLo,C.accEdge);
+    // 行き先の図柄を小さく
+    if(l.st==='go'){ctx.save();ctx.globalAlpha=.9;const ic=ICON[l.shop];ic(p[0],p[1]-r-10*u,.38*u);ctx.restore();}
+  }
+}
+function drawSparks(){
+  const sp=[],tr=[];
+  for(const p of S.parts){if(p.k==='spark'){const k=1-p.age/p.life;sp.push([p.x,p.y,p.r*k+.2]);}else if(p.k==='trail'){const k=1-p.age/p.life;tr.push([p.x,p.y,p.r*k+.2]);}}
+  beads(tr,C.accHi,C.accLo,C.accEdge,1.2);beads(sp,C.accHi,C.accLo,C.accEdge,1.5);
+}
+function drawHand(){
+  const d=S.demo;if(!d.active)return;const u=L.u;
+  const tp=targetPoint(d.g);if(!tp)return;
+  const t=d.t,end=d.long?3.2:2.0;
+  const a=t<.4?t/.4:(t>end-.4?(end-t)/.4:1);
+  const pr=d.g.type==='hose'?demoPress():(t>.6&&t<.9?1:0);
+  const x=tp[0]+20*u*(1-ease(t/.6)),y=tp[1]+30*u*(1-ease(t/.6))+8*u-pr*6*u;
+  ctx.save();ctx.globalAlpha=clamp(a,0,1);
+  if(pr>0){RS(2,3*u,C.acc,()=>{circ(tp[0],tp[1],(12+pr*8)*u);},C.accLo,C.accEdge);}
+  R(3,C.base,()=>{T(x,y,u*1.25);rr(-5,-22,10,24,5);rr(-13,-2,26,24,9);rr(-17,0,7,14,3.5);U();});
+  Gv(1.2,()=>{T(x,y,u*1.25);ctx.moveTo(-4,4);ctx.lineTo(-4,12);ctx.moveTo(3,4);ctx.lineTo(3,12);U();});
+  ctx.restore();
+}
+
+
+// ===================== ループ・可視性 =====================
+let raf=0,lastT=0,running=false;
+function loop(now){
+  raf=0;if(!running)return;
+  let dt=(now-lastT)/1000;lastT=now;
+  if(!(dt>0))dt=1/60;dt=Math.min(dt,1/30);
+  try{update(dt);frame();}catch(e){console.error(e);}
+  raf=requestAnimationFrame(loop);
+}
+function start(){if(running)return;running=true;lastT=performance.now();raf=requestAnimationFrame(loop);}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){releaseHose();stop();try{if(AC&&AC.state==='running')AC.suspend();}catch(e){}}
+  else{try{if(AC&&AC.state==='suspended')AC.resume().catch(()=>{});}catch(e){}start();}
+});
+window.addEventListener('pagehide',()=>{releaseHose();stop();});
+window.addEventListener('pageshow',()=>{if(!document.hidden)start();});
+let rzT=0;
+function onResize(){resize();frame();}
+window.addEventListener('resize',()=>{clearTimeout(rzT);rzT=setTimeout(onResize,60);});
+window.addEventListener('orientationchange',()=>{clearTimeout(rzT);rzT=setTimeout(onResize,200);});
+resize();frame();if(!document.hidden)start();
+// 自動テスト用の読み取り口（UIには出ない）
+window.__gf={S,G,get L(){return L;},get K(){return K;},get O(){return[OX,OY];},guide,
+  toScreen(x,y){return[OX+x*K,OY+y*K];},
+  step(sec){const n=Math.round(sec*60);for(let i=0;i<n;i++)update(1/60);frame();},
+  forceShadow(){startShadow();},prof(on){PROF=on?[]:null;},audio(){return AC?AC.state:'none';},get PROF(){return PROF;}};
+})();
+</script>
+</body>
+</html>
