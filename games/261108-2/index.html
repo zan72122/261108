@@ -480,7 +480,7 @@ function update(dt){
   for(const [c,idx] of [[c1,1],[S.c2,2]]){
     const up=idx===1?c1.f>.5:true;
     const tgt=up?clamp(c.flow*3.4,0,1):0;
-    if(up&&c.flow>.05&&c.open<.12&&t-c.lastKick>.6){c.v+=9;c.lastKick=t;SND.flap(c.flow>.22);log('flap'+idx,c.flow.toFixed(2));}
+    if(up&&c.flow>.05&&c.open<.12&&t-c.lastKick>.6){c.v+=3+7*Math.min(1,c.flow*3.5);c.lastKick=t;SND.flap(c.flow>.22);log('flap'+idx,c.flow.toFixed(2));}
     spring(c,'open','v',tgt,dt,40,7);c.open=clamp(c.open,-.1,1.15);c.peak=Math.max(c.peak||0,c.open);
     if(up){c.acc+=c.flow*dt;
       while(c.acc>=.045){c.acc-=.045;
