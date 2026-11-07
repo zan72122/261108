@@ -1318,7 +1318,7 @@ document.addEventListener('visibilitychange',()=>{
 window.__gf={get s(){return {cases:cases.map(c=>({ing:c.ing,open:c.open,prog:c.prog,li:c.li})),plate:plate.map(i=>i.ing),merged,plazaT,
   P:P.map(p=>({u:p.u,tu:p.tu,roof:p.roof,x:platX(p)})),gap:gapPx(),
   PS:PS.map(ps=>({id:ps.id,style:ps.style,fav:ps.fav,plat:ps.plat,device:ps.device,single:ps.single,box:ps.box,boxReady:ps.boxReady,x:psCenter(ps).x,y:psCenter(ps).y,bx:boxPos(ps).x,by:boxPos(ps).y,favDone:ps.favDone})),
-  sign:{t:sign.t,b:signBoard()},memory,stalls,gold:gold?{open:gold.open,appear:gold.appear}:null,cycle,hint:hint?{kind:hint.kind,x:hint.x,y:hint.y,to:hint.to?{x:hint.to.x,y:hint.to.y}:null,dir:hint.dir||0}:null,parts:parts.length,
+  sign:{t:sign.t,b:signBoard()},memory,stalls,gold:gold?{open:gold.open,appear:gold.appear}:null,cycle,hint:hint?{kind:hint.kind,x:hint.x,y:hint.y,r:hint.r,to:hint.to?{x:hint.to.x,y:hint.to.y}:null,dir:hint.dir||0}:null,parts:parts.length,
   view:{SC,OX,OY,PORT}};},
   toScreen:(x,y)=>({x:x*SC+OX,y:y*SC+OY}), caseGeom:i=>caseGeom(cases[i]), goldGeom:()=>L.gold, L:()=>L};
 
