@@ -667,6 +667,7 @@ function updateDoll(dt){
     if(!inOpen){if(D.side==='front')D.y=L.frontMin;else D.y=L.backMax;}
     else if(D.side==='back'&&!rt.corr.some(c=>D.x>=c.x0&&D.x<=c.x1&&c.open)){D.pushT=0.3;}
   }
+  if(prevSide==='front'&&D.side==='back'&&rt.corr.some(c=>c.kind==='roof'&&c.open&&D.x>=c.x0-4&&D.x<=c.x1+4)){S.used.lift=1;dirty=true;}
   if(prevSide!==D.side){D.sqv-=3;if(D.side==='back')D.expr='wow',D.exprT=0.6;
     if(prevSide==='back'&&D.pushT>0){sfx.push();}}
   if(D.pushT>0)D.pushT-=dt;
@@ -817,33 +818,39 @@ function doSale(c,key){
 function pickTarget(){
   if(D.latch||rt.resetT>0)return null;
   const h=held();const hung=hungFlags();const bk=basketFlags();
+  const r0=rt.runs[0],s0=r0?rt.roofs[r0.key]:null;
+  const late=S.used.lift&&S.used.tub&&(S.sales|0)>=3;
   if(h){
     if(D.side==='back'){
       if(h.wet<0.3&&!S.used.tub)return {k:'tub'};
       return backExit();
     }
+    if(late&&h.wet<0.3&&S.used.tub)return {k:'basket'};          // 片付けて次の洗濯へ
+    if(h.wet<0.3&&!S.used.tub&&S.used.lift){const c=passCorr();if(c)return c;if(s0&&s0.RL<0.5)return {k:'w'};}
     return {k:'slot',i:bestSlot(h)};
   }
   if(D.side==='back'){return backExit();}
   if(hung.length===0)return bk.length?{k:'basket'}:null;
   if(hung.some(f=>f.wet>0.45)&&rt.Kw<0.5&&!S.used.w)return {k:'w'};
-  if(bk.length)return {k:'basket'};
+  if(bk.length&&!late)return {k:'basket'};
   if(hung.some(f=>f.wet>0.4))return {k:'t'};
-  const runs=rt.runs;
   const inRoof=hung.filter(f=>runOf(f));
-  if(inRoof.length<hung.length){
-    // はなれた旗を取って、となりへ寄せる
-    const f=hung.find(f=>!runOf(f));
-    if(f)return {k:'slot',i:f.loc};
-  }
-  const r=runs[0];if(!r)return null;
-  const s=rt.roofs[r.key];
-  if(s.taut<0.95)return {k:'t'};
-  if(s.RL>0.5&&!s.open)return {k:'w'};
-  if(!S.used.l)return {k:'l'};
-  if(s.open&&custs.some(c=>c.path[0]&&c.path[0].act==='wait')&&!serving(r.key))return {k:'serve',r};
-  if(!S.used.lift){return {k:'w'};}
-  return null;
+  if(inRoof.length<hung.length){const f=hung.find(f=>!runOf(f));if(f)return {k:'slot',i:f.loc};}
+  if(!r0)return null;
+  if(s0.taut<0.95)return {k:'t'};
+  if(s0.open&&custs.some(c=>c.path[0]&&c.path[0].act==='wait')&&!serving(r0.key))return {k:'serve',r:r0};
+  if(!S.used.l&&(s0.open||s0.RL<0.5)){if(s0.RL>0.5&&!s0.open)return {k:'w'};return {k:'l'};}
+  if(!S.used.lift){if(s0.RL<0.6)return {k:'w'};const c=passCorr();if(c)return c;}
+  if(!S.used.tub){if(s0.RL<0.6)return {k:'w'};return {k:'slot',i:r0.b};}   // 屋根の旗を取って水場へ
+  if((S.sales|0)<3){if(s0.RL>0.5)return {k:'w'};return null;}
+  // たっぷり遊んだら: 旗をかごへ戻すと次の洗濯
+  const f=hung[hung.length-1];if(s0.open||s0.RL<0.5){if(rt.Kw<0.5&&s0.open)return {k:'w'};}
+  return f?{k:'slot',i:f.loc}:{k:'basket'};
+}
+function passCorr(){
+  let best=null,bd=1e9;
+  for(const c of rt.corr){if(!c.open)continue;const x=(c.x0+c.x1)/2;const d=Math.abs(x-D.x);if(d<bd){bd=d;best=c;}}
+  return best?{k:'pass',x:(best.x0+best.x1)/2,x0:best.x0,x1:best.x1}:null;
 }
 function backExit(){
   let best=null,bd=1e9;
@@ -868,6 +875,7 @@ function targetPoint(tg){
     case 'w':case 't':case 'l':return knobGrab(tg.k);
     case 'tub':return {x:L.tub.x,y:L.tub.y+4};
     case 'exit':return {x:tg.x,y:L.backMax+6};
+    case 'pass':return {x:tg.x,y:L.backMax-12};
     case 'serve':return {x:(L.slotX[tg.r.a]+L.slotX[tg.r.b])/2,y:L.frontMin+40};
   }
   return null;
@@ -881,7 +889,7 @@ function lookPoint(tg){
     case 't':return {x:L.kt.x,y:L.kt.y-64};
     case 'l':return {x:sunX(),y:L.rail.y-26};
     case 'tub':return {x:L.tub.x,y:L.tub.y-14};
-    case 'exit':return {x:tg.x,y:L.fenceY};
+    case 'exit':case 'pass':return {x:tg.x,y:L.fenceY};
     case 'serve':return {x:(L.slotX[tg.r.a]+L.slotX[tg.r.b])/2,y:L.backMax-20};
   }
   return null;
@@ -1155,6 +1163,9 @@ function drawStructure(){
     const pin=()=>rr(x-5*k,y-8*k-b*8,10*k,18*k,3);
     fi(()=>ci(x,y-b*8,16*k),'yel',0.5);kn(pin);fi(pin,'yel');ol(pin,2.6*k);
   }
+  // 通り道の誘導 (通れる所がそっと光る)
+  const tg=rt.target;
+  if(tg&&(tg.k==='pass'||tg.k==='exit')){const c=rt.corr.find(c=>Math.abs((c.x0+c.x1)/2-tg.x)<2);if(c&&c.kind==='roof')fi(()=>rr(c.x0,L.fenceY-L.CH-6,c.x1-c.x0,L.CH+14,8),'yel',0.2+0.35*bnc());}
   // カウンターとはね上げ板
   drawCounters();
   // 市の飾り
@@ -1294,7 +1305,7 @@ function drawCounters(){
       const blk=rt.block[g];
       const fh=ch*(1-0.88*op);
       const flap=()=>rr(gx-gw+2,fy-fh,gw*2-4,fh,3);
-      const isT=rt.target&&rt.target.k==='exit'&&Math.abs(rt.target.x-gx)<30;
+      const isT=rt.target&&(rt.target.k==='exit'||rt.target.k==='pass')&&Math.abs(rt.target.x-gx)<30;
       if(isT)fi(()=>rr(gx-gw-4,fy-ch-8,gw*2+8,ch+12,6),'yel',0.4*bnc()+0.2);
       kn(flap);fi(flap,'red');fp(flap,'navy',0.3);ol(flap,3*k);
       if(op>0.05){const up=()=>rr(gx-gw+2,fy-ch-op*ch*0.9-4,gw*2-4,op*ch*0.6+4,3);kn(up);fi(up,'red',0.8);fp(up,'yel',0.6);ol(up,2.6*k);}
