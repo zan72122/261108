@@ -195,7 +195,7 @@ function newRound(opt){
   S.K.w=rnd(0.1,0.22);
   S.shade0=ri(3);S.hangOrder=[];S.hangs=0;S.round++;
   S.opened=[];
-  S.used={w:0,t:0,l:0,lift:0,tub:0,sep:0};
+  S.used={w:0,t:0,l:0,lift:0,tub:0,sep:0};S.salesR=0;
 }
 function fresh(){
   S={v:1,round:0,flags:[],K:{w:0.16,l:0.5},ang:0,doll:null,shk:null,hangOrder:[],opened:[],shade0:0,used:{},hangs:0,sales:0};
@@ -806,7 +806,7 @@ function serving(key){
   return D.x>L.slotX[r.a]-L.sp/2&&D.x<L.slotX[r.b]+L.sp/2&&D.y<L.frontMin+80;
 }
 function doSale(c,key){
-  sfx.sale();S.sales=(S.sales|0)+1;
+  sfx.sale();S.sales=(S.sales|0)+1;S.salesR=(S.salesR|0)+1;
   const r=rt.runs.find(q=>q.key===key);
   const f=r?S.flags[r.ids[ri(r.ids.length)]]:null;
   addArc('coin',c.x,c.y-30,D.x,D.y-70,'yel');
@@ -819,7 +819,7 @@ function pickTarget(){
   if(D.latch||rt.resetT>0)return null;
   const h=held();const hung=hungFlags();const bk=basketFlags();
   const r0=rt.runs[0],s0=r0?rt.roofs[r0.key]:null;
-  const late=S.used.lift&&S.used.tub&&(S.sales|0)>=3;
+  const late=S.used.lift&&S.used.tub&&(S.salesR|0)>=3;
   if(h){
     if(D.side==='back'){
       if(h.wet<0.3&&!S.used.tub)return {k:'tub'};
@@ -842,7 +842,7 @@ function pickTarget(){
   if(!S.used.l&&(s0.open||s0.RL<0.5)){if(s0.RL>0.5&&!s0.open)return {k:'w'};return {k:'l'};}
   if(!S.used.lift){if(s0.RL<0.6)return {k:'w'};const c=passCorr();if(c)return c;}
   if(!S.used.tub){if(s0.RL<0.6)return {k:'w'};return {k:'slot',i:r0.b};}   // 屋根の旗を取って水場へ
-  if((S.sales|0)<3){if(s0.RL>0.5)return {k:'w'};return null;}
+  if((S.salesR|0)<3){if(s0.RL>0.5)return {k:'w'};return null;}
   // たっぷり遊んだら: 旗をかごへ戻すと次の洗濯
   const f=hung[hung.length-1];if(s0.open||s0.RL<0.5){if(rt.Kw<0.5&&s0.open)return {k:'w'};}
   return f?{k:'slot',i:f.loc}:{k:'basket'};
