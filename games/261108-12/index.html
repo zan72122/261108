@@ -256,7 +256,7 @@ function scheduleStep(step,tt){
   }
   pend.length=0;
   if(mode==='finale')return;
-  if(s===0&&step>=reply.busyUntil)pickReply(step,tt);
+  if(s===0&&(step>=reply.busyUntil||(finaleMark===7&&mode==='open'&&allStopped())))pickReply(step,tt);
   if(reply.table>=0&&step<reply.busyUntil){
     var tb=tables[reply.table],d=tb.pat[step-reply.start];
     if(d!==undefined&&d>=0){snd.puff(tt,mtof(degM(d)),1);replyAt(tt,tb.t,d);}
@@ -270,7 +270,7 @@ function scheduleStep(step,tt){
   if(s===7&&(bar&1)&&pairedCount()>0&&Math.random()<0.4){snd.bell(tt,mtof(ch[2]+36),0.45);vis(tt,function(){topSpark=gameT;});}
 }
 function pickReply(step,tt){
-  if(mode==='open'&&allStopped()&&finaleMark>=0&&reply.plays-finaleMark>=pairedCount()){
+  if(mode==='open'&&allStopped()&&finaleMark===7){
     reply.table=-1;reply.busyUntil=step+9999;vis(tt,startFinale);return;
   }
   var n=-1;
@@ -319,7 +319,7 @@ function beat(b,v){
 }
 var replyLog=[];
 function replyVis(t,d){
-  var tb=tables[t];replyLog.push(t);if(replyLog.length>60)replyLog.shift();tb.cheerT=gameT;tb.hopT=gameT;
+  var tb=tables[t];replyLog.push(t);if(finaleMark>=0&&mode==='open')finaleMark|=1<<t;if(replyLog.length>60)replyLog.shift();tb.cheerT=gameT;tb.hopT=gameT;
   for(var b=0;b<3;b++)for(var k=0;k<2;k++)if(BR[b][k]===t&&breads[b].deliv[k]){var P=paths['B'+b+'_'+k];addImp('B'+b+'_'+k,P.len-3,0.8);}
   if(tb.ret>0.95)addPulse(['R'+t],0,-1-t,0.7,false,function(){ovenFlare=gameT;});
 }
@@ -358,7 +358,7 @@ function tapTrunk(b,s){
   }
   if(mode==='open'&&br.pushed){
     if(br.playing){br.playing=false;snd.stop(FREQ[b]);spawn(P.x[i],P.y[i],INK,3,14,0);
-      if(allStopped())finaleMark=reply.plays;
+      if(allStopped())finaleMark=0;
       return;}
     br.playing=true;br.heat=1;finaleMark=-1;snd.pop(FREQ[b]);
     addPulse(['T'+b,'B'+b+'_'+br.cur],s,b,0.7,true,function(){arrive(b,br.cur);});
